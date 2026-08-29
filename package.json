@@ -1,5 +1,5 @@
 {
-  "name": "warp-compiler",
+  "name": "@warp-ecosystem/warp-compiler",
   "version": "0.1.0",
   "description": "Compile multiple JavaScript modules into a single TurboWarp extension.",
   "type": "module",
