@@ -1,8 +1,4 @@
-# Warp Compiler
-
-![Warp Compiler logo](assets/logo.svg)
-
----
+# Warp Compiler (`warp-compiler`)
 
 ## Overview
 
