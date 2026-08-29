@@ -61,8 +61,6 @@ function printHelp(product) {
     "Commands:",
     `  ${pc.bold("init")}   Scaffold a new extension project`,
     `  ${pc.bold("build")}  Compile the extension into a single file`,
-    "",
-    `Run '${cmd} <command> --help' for command-specific help.`,
   ];
   console.log(lines.join("\n"));
 }
