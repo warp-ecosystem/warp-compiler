@@ -1,0 +1,6 @@
+{
+  "name": "Warp Compiler",
+  "bin": "warp-compiler",
+  "runtimeGlobal": "Warp",
+  "description": "Compile multiple JavaScript modules into a single TurboWarp extension."
+}
