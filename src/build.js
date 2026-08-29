@@ -368,7 +368,7 @@ function collectReferencedAssets(ast, runtimeGlobal, assets) {
             return;
           }
           referenced.add(keyNode.value);
-        } else if (keyNode.type === "Identifier" && n !== current) {
+        } else if (keyNode.type === "Identifier" && n.object === current) {
           referenced.add(keyNode.name);
         }
       }
