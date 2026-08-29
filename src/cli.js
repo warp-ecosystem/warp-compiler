@@ -1,0 +1,68 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+import pc from "picocolors";
+
+import { initProject } from "./init.js";
+import { runBuild } from "./build.js";
+import { error } from "./logger.js";
+
+export async function runCli(product, argv) {
+  const command = argv[0];
+
+  if (
+    !command ||
+    command === "--help" ||
+    command === "-h" ||
+    command === "help"
+  ) {
+    printHelp(product);
+    return 0;
+  }
+
+  if (command === "--version" || command === "-v" || command === "version") {
+    console.log(version());
+    return 0;
+  }
+
+  if (command === "init") {
+    return initProject("src") ? 0 : 1;
+  }
+
+  if (command === "build") {
+    return runBuild(product);
+  }
+
+  error(`Unknown command: ${command}`);
+  console.log(`Run '${product.bin} --help' for usage.`);
+  return 1;
+}
+
+function version() {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const pkg = JSON.parse(
+      readFileSync(path.join(here, "..", "package.json"), "utf8"),
+    );
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+function printHelp(product) {
+  const cmd = product.bin;
+  const lines = [
+    `${pc.bold(product.name)} — ${product.description}`,
+    "",
+    `Usage: ${cmd} <command>`,
+    "",
+    "Commands:",
+    `  ${pc.bold("init")}   Scaffold a new extension project`,
+    `  ${pc.bold("build")}  Compile the extension into a single file`,
+    "",
+    `Run '${cmd} <command> --help' for command-specific help.`,
+  ];
+  console.log(lines.join("\n"));
+}

@@ -1,0 +1,41 @@
+{
+  "name": "warp-compiler",
+  "version": "0.1.0",
+  "description": "Compile multiple JavaScript modules into a single TurboWarp extension.",
+  "type": "module",
+  "bin": {
+    "warp-compiler": "./bin/warp-compiler.js"
+  },
+  "main": "src/index.js",
+  "files": [
+    "bin",
+    "src",
+    ".product.json"
+  ],
+  "scripts": {
+    "build": "node ./bin/warp-compiler.js build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "keywords": [
+    "turbowarp",
+    "scratch",
+    "compiler",
+    "cli"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "acorn": "^8.18.0",
+    "picocolors": "^1.1.1",
+    "prettier": "^3.3.0",
+    "rollup": "^4.18.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "eslint": "^9.9.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.9.0"
+  }
+}
