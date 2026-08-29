@@ -12,6 +12,11 @@ const SRC_DIR = "src";
 const ASSETS_DIR = "assets";
 const DIST_DIR = "dist";
 
+/**
+ * Build the extension by bundling source files and assets.
+ * @param {object} product - Product configuration object.
+ * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
+ */
 export async function runBuild(product) {
   const { bin, runtimeGlobal } = product;
 
@@ -113,6 +118,10 @@ export async function runBuild(product) {
   return 0;
 }
 
+/**
+ * Load all assets from the assets directory into a map.
+ * @returns {Map<string, string>} Map of asset paths to data URIs.
+ */
 function loadAssets() {
   const assetsDir = path.resolve(process.cwd(), ASSETS_DIR);
   if (!fs.existsSync(assetsDir)) {
@@ -138,6 +147,11 @@ function loadAssets() {
   return map;
 }
 
+/**
+ * Determine MIME type from file extension.
+ * @param {string} filePath - Path to the file.
+ * @returns {string} MIME type string.
+ */
 function mimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const table = {
@@ -160,6 +174,11 @@ function mimeType(filePath) {
   return table[ext] || "application/octet-stream";
 }
 
+/**
+ * Bundle the entry file and its dependencies using Rollup.
+ * @param {string} entryPath - Path to the entry file.
+ * @returns {Promise<string|Error>} Bundled code or error.
+ */
 async function bundleEntry(entryPath) {
   let bundle;
   try {
@@ -179,6 +198,13 @@ async function bundleEntry(entryPath) {
   }
 }
 
+/**
+ * Analyze the AST to determine which functions and declarations to retain.
+ * @param {object} ast - Abstract syntax tree.
+ * @param {object} manifest - Manifest configuration.
+ * @param {string} source - Source code.
+ * @returns {object|Error} Object containing methods, statements, and source, or error.
+ */
 function retainFunctions(ast, manifest, source) {
   const exportNames = new Set();
   const topLevelFunctions = new Map();
@@ -316,10 +342,22 @@ function retainFunctions(ast, manifest, source) {
   return { methods, statements, source };
 }
 
+/**
+ * Extract a slice of source code for a given AST node.
+ * @param {string} src - Source code.
+ * @param {object} node - AST node with start and end positions.
+ * @returns {string} Extracted source code slice.
+ */
 function slice(src, node) {
   return src.slice(node.start, node.end);
 }
 
+/**
+ * Format a function declaration as a class method.
+ * @param {object} node - Function AST node.
+ * @param {string} src - Source code.
+ * @returns {string} Formatted method code.
+ */
 function fmtFunctionMethod(node, src) {
   let text = slice(src, node).trim();
   text = text.replace(
@@ -332,6 +370,13 @@ function fmtFunctionMethod(node, src) {
   return text;
 }
 
+/**
+ * Collect all assets referenced in the source code.
+ * @param {object} ast - Abstract syntax tree.
+ * @param {string} runtimeGlobal - Runtime global variable name.
+ * @param {Map<string, string>} assets - Available assets map.
+ * @returns {Map<string, string>|Error} Map of referenced assets or error.
+ */
 function collectReferencedAssets(ast, runtimeGlobal, assets) {
   const referenced = new Set();
   let detectedError = null;
@@ -401,6 +446,16 @@ function collectReferencedAssets(ast, runtimeGlobal, assets) {
   return result;
 }
 
+/**
+ * Assemble the final output by combining manifest, assets, and code.
+ * @param {object} options - Assembly options.
+ * @param {string} options.runtimeGlobal - Runtime global variable name.
+ * @param {string} options.className - Extension class name.
+ * @param {object} options.manifest - Manifest object.
+ * @param {object} options.retained - Retained methods and statements.
+ * @param {Map<string, string>} options.assets - Assets map.
+ * @returns {Promise<string>} Formatted output code.
+ */
 async function assembleOutput({
   runtimeGlobal,
   className,
@@ -452,6 +507,11 @@ async function assembleOutput({
   });
 }
 
+/**
+ * Run consistency checks between manifest, source code, and package.json.
+ * @param {object} manifest - Manifest object.
+ * @param {object} ast - Abstract syntax tree.
+ */
 function runConsistencyChecks(manifest, ast) {
   const stringLiterals = [];
   const visit = (n) => {

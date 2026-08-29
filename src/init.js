@@ -56,6 +56,11 @@ export function unusedFunction() {
 }
 `;
 
+/**
+ * Initialize a new extension project with scaffolded files.
+ * @param {string} srcDir - Source directory path.
+ * @returns {boolean} True if initialization was successful.
+ */
 export function initProject(srcDir) {
   const files = {};
 

@@ -8,6 +8,12 @@ import { initProject } from "./init.js";
 import { runBuild } from "./build.js";
 import { error } from "./logger.js";
 
+/**
+ * Run the CLI with the given product configuration and command-line arguments.
+ * @param {object} product - Product configuration object.
+ * @param {string[]} argv - Command-line arguments.
+ * @returns {Promise<number>} Exit code.
+ */
 export async function runCli(product, argv) {
   const command = argv[0];
 
@@ -39,6 +45,10 @@ export async function runCli(product, argv) {
   return 1;
 }
 
+/**
+ * Get the package version from package.json.
+ * @returns {string} Version string.
+ */
 function version() {
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));
@@ -51,6 +61,10 @@ function version() {
   }
 }
 
+/**
+ * Print help message showing available commands.
+ * @param {object} product - Product configuration object.
+ */
 function printHelp(product) {
   const cmd = product.bin;
   const lines = [
