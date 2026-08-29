@@ -104,17 +104,22 @@ npm run format
 npm run lint
 ```
 
-Prettier's own defaults apply (double quotes, trailing commas, `objectWrap:
-"collapse"`), so there is nothing to configure per-file. Please make sure your
-changes are formatted and lint-clean before submitting.
+The repository's `.prettierrc` configures double quotes, trailing commas, and
+`objectWrap: "collapse"`, so there is nothing to configure per-file. Please make
+sure your changes are formatted and lint-clean before submitting.
 
 > The generated extension output is also formatted with the same Prettier
 > configuration, so the compiler's behavior is what you see in `dist/`.
 
 ## Testing
 
-There is currently no automated test suite. In the meantime, please verify your
-changes manually:
+Run the automated test suite as your primary check:
+
+```bash
+npm test
+```
+
+You can also verify a change end-to-end with a manual CLI smoke test:
 
 ```bash
 # Scaffold a scratch project somewhere outside the repo
