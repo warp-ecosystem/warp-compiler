@@ -14,6 +14,7 @@
   ],
   "scripts": {
     "build": "node ./bin/warp-compiler.js build",
+    "test": "node --test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -29,7 +30,7 @@
   "dependencies": {
     "acorn": "^8.18.0",
     "picocolors": "^1.1.1",
-    "prettier": "^3.3.0",
+    "prettier": "^3.5.0",
     "rollup": "^4.18.0"
   },
   "devDependencies": {

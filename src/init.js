@@ -1,10 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { success, skipped, error } from "./logger.js";
+import { success, skipped } from "./logger.js";
 
 export const MANIFEST_FILE = "99-manifest.json";
 export const ENTRY_FILE = "00-index.js";
+export const ASSET_FILE = "hello-icon.svg";
+
+export const assetTemplate = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <circle cx="12" cy="12" r="10" fill="#4C97FF" />
+</svg>`;
 
 export const manifestTemplate = {
   class: "HelloWorld",
@@ -59,12 +64,11 @@ export function initProject(srcDir) {
   files[path.join(srcDir, ENTRY_FILE)] = entryTemplate;
   files[path.join(srcDir, "01-hello-world.js")] = helloWorldTemplate;
 
-  if (fs.existsSync(srcDir)) {
-    error(`Project already exists at ${srcDir}`);
-    return false;
-  }
-
   fs.mkdirSync(srcDir, { recursive: true });
+
+  const assetsDir = path.join(srcDir, "..", "assets");
+  fs.mkdirSync(assetsDir, { recursive: true });
+  files[path.join(assetsDir, ASSET_FILE)] = assetTemplate;
 
   for (const [filePath, contents] of Object.entries(files)) {
     const display = path.relative(process.cwd(), filePath) || filePath;
