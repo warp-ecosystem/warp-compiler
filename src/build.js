@@ -67,11 +67,17 @@ export async function runBuild(product) {
     return 1;
   }
 
-  const ast = parse(bundleCode, {
-    ecmaVersion: "latest",
-    sourceType: "module",
-    allowReturnOutsideFunction: true,
-  });
+  let ast;
+  try {
+    ast = parse(bundleCode, {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      allowReturnOutsideFunction: true,
+    });
+  } catch (e) {
+    error(`Failed to parse the bundled output: ${e.message}`);
+    return 1;
+  }
 
   const retained = retainFunctions(ast, manifest, bundleCode);
   if (retained instanceof Error) {
@@ -155,13 +161,22 @@ function mimeType(filePath) {
 }
 
 async function bundleEntry(entryPath) {
-  const bundle = await rollup.rollup({
-    input: entryPath,
-    treeshake: false,
-    onwarn() {},
-  });
-  const { output } = await bundle.generate({ format: "es" });
-  return output[0].code;
+  let bundle;
+  try {
+    bundle = await rollup.rollup({
+      input: entryPath,
+      treeshake: false,
+      onwarn() {},
+    });
+    const { output } = await bundle.generate({ format: "es" });
+    return output[0].code;
+  } catch (e) {
+    return new Error(
+      `Failed to bundle ${path.join(SRC_DIR, ENTRY)}: ${e.message}`,
+    );
+  } finally {
+    if (bundle) await bundle.close();
+  }
 }
 
 function retainFunctions(ast, manifest, source) {
