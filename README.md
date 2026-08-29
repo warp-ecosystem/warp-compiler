@@ -1,3 +1,5 @@
+# Warp Compiler
+
 ![Warp Compiler logo](assets/logo.svg)
 
 ---
@@ -22,7 +24,9 @@ Warp Compiler is a Node tool to compile multiple JavaScript files into a single,
 - **Consistency checks** — Warns (without failing) when source or
   `package.json` values drift from the manifest.
 - **Beautiful output** — The result is formatted with Prettier for readability.
-- **Minimal dependencies** — Terminal output uses `picocolors`; nothing heavier.
+- **Minimal dependencies** — Only four runtime packages, the ones
+  `src/build.js` actually imports (`rollup`, `acorn`, `prettier`, and
+  `picocolors`); nothing heavier is pulled in.
 
 ## Installation
 
@@ -40,6 +44,7 @@ You can also install Warp Compiler locally with `git` and `npm`:
 
 ```bash
 git clone https://github.com/warp-ecosystem/warp-compiler.git
+cd warp-compiler
 npm install
 ```
 
