@@ -29,7 +29,7 @@ Warp Compiler is a Node tool to compile multiple JavaScript files into a single,
 To install Warp Compiler with `npm`, run:
 
 ```bash
-npm install --save-dev warp-compiler
+npm install --save-dev @warp-ecosystem/warp-compiler
 # Ensure it installed properly
 npx warp-compiler -v
 ```
