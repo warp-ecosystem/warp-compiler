@@ -307,9 +307,13 @@ function slice(src, node) {
 
 function fmtFunctionMethod(node, src) {
   let text = slice(src, node).trim();
-  if (node.async) text = text.replace(/^async\s+/, "");
-  if (node.generator) text = text.replace(/^(function)\s*\*/, "*");
-  text = text.replace(/^function\s+/, "");
+  text = text.replace(
+    /^(async\s+)?function(\s*\*)?\s*/,
+    (_, asyncKw, starKw) => {
+      const asyncPrefix = asyncKw ? "async " : "";
+      return starKw ? `${asyncPrefix}* ` : asyncPrefix;
+    },
+  );
   return text;
 }
 
