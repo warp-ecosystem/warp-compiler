@@ -4,7 +4,7 @@
   "description": "Compile multiple JavaScript modules into a single TurboWarp extension.",
   "type": "module",
   "bin": {
-    "warp-compiler": "./bin/warp-compiler.js"
+    "warp-compiler": "bin/warp-compiler.js"
   },
   "main": "src/index.js",
   "files": [
