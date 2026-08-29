@@ -38,6 +38,22 @@ export async function runBuild(product) {
     return 1;
   }
 
+  for (const field of ["id", "version"]) {
+    const value = manifest[field];
+    if (typeof value !== "string" || value.length === 0) {
+      error(
+        `Manifest is missing a "${field}" field with a non-empty string value.`,
+      );
+      return 1;
+    }
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) || value.includes("..")) {
+      error(
+        `Manifest "${field}" (${JSON.stringify(value)}) must use only letters, digits, dots, dashes, and underscores, with no path separators or traversal sequences.`,
+      );
+      return 1;
+    }
+  }
+
   if (!fs.existsSync(entryPath)) {
     error(`Missing entry file ${path.join(SRC_DIR, ENTRY)}.`);
     return 1;
