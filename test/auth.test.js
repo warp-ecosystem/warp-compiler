@@ -41,13 +41,22 @@ function prepareHome(t) {
   return dir;
 }
 
+let originalStdinDescriptor;
+
 function mockStdin(text) {
+  if (originalStdinDescriptor === undefined) {
+    originalStdinDescriptor = Object.getOwnPropertyDescriptor(process, "stdin");
+  }
   Object.defineProperty(process, "stdin", {
     configurable: true,
     value: Readable.from([text]),
   });
   return () => {
-    delete process.stdin;
+    if (originalStdinDescriptor) {
+      Object.defineProperty(process, "stdin", originalStdinDescriptor);
+    } else {
+      delete process.stdin;
+    }
   };
 }
 
@@ -67,10 +76,11 @@ function writeCredentialsFile(creds) {
 test("login stores the pasted token under the resolved registry URL", async (t) => {
   prepareHome(t);
   const finish = withConsole();
+  t.after(finish);
   const restoreStdin = mockStdin("secret-token\n");
+  t.after(restoreStdin);
 
   const code = await runLogin(["--registry", "https://registry.one.example"]);
-  restoreStdin();
   const { log, error: errors } = finish();
 
   assert.equal(code, 0);
@@ -93,13 +103,13 @@ test("login stores the pasted token under the resolved registry URL", async (t) 
 test("login for a second registry adds a key without disturbing the first", async (t) => {
   prepareHome(t);
 
-  let restoreStdin = mockStdin("token-a\n");
+  const restoreStdinA = mockStdin("token-a\n");
+  t.after(restoreStdinA);
   assert.equal(await runLogin(["--registry", "https://registry-a.example"]), 0);
-  restoreStdin();
 
-  restoreStdin = mockStdin("token-b\n");
+  const restoreStdinB = mockStdin("token-b\n");
+  t.after(restoreStdinB);
   assert.equal(await runLogin(["--registry", "https://registry-b.example"]), 0);
-  restoreStdin();
 
   assert.deepEqual(readCredentialsFile(), {
     "https://registry-a.example": "token-a",
@@ -110,10 +120,11 @@ test("login for a second registry adds a key without disturbing the first", asyn
 test("an empty paste during login writes nothing and exits 1", async (t) => {
   prepareHome(t);
   const finish = withConsole();
+  t.after(finish);
   const restoreStdin = mockStdin("   \n");
+  t.after(restoreStdin);
 
   const code = await runLogin(["--registry", "https://registry.example"]);
-  restoreStdin();
   const { error: errors } = finish();
 
   assert.equal(code, 1);
@@ -136,6 +147,7 @@ test("logout removes only the matching URL's entry", async (t) => {
   });
 
   const finish = withConsole();
+  t.after(finish);
   const code = await runLogout(["--registry", "https://registry-a.example"]);
   const { log, error: errors } = finish();
 
@@ -159,6 +171,7 @@ test("logout for a URL with no stored entry warns and exits 0", async (t) => {
   writeCredentialsFile({ "https://registry-a.example": "token-a" });
 
   const finish = withConsole();
+  t.after(finish);
   const code = await runLogout([
     "--registry",
     "https://registry-other.example",

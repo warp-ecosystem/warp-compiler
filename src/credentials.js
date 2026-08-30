@@ -32,15 +32,27 @@ export function readCredentials() {
 }
 
 /**
- * Write the credentials file, creating ~/.warp and restricting access to the
- * owner only since it contains bearer tokens.
+ * Write the credentials file atomically, creating ~/.warp and restricting
+ * access to the owner only since it contains bearer tokens. The JSON is first
+ * written to a temp file in the same directory (mode 0o600) and then renamed
+ * over the target; any temp file left behind by a failure is removed.
  * @param {object} credentials - Map of registry URL to token.
  */
 export function writeCredentials(credentials) {
   const filePath = credentialsPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(credentials, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  fs.chmodSync(filePath, 0o600);
+  const tempPath = `${filePath}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, `${JSON.stringify(credentials, null, 2)}\n`, {
+      mode: 0o600,
+    });
+    fs.renameSync(tempPath, filePath);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // nothing to clean up
+    }
+    throw err;
+  }
 }

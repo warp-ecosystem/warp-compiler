@@ -12,7 +12,13 @@ import { error, success, warn } from "./logger.js";
  * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
  */
 export async function runLogin(args) {
-  const registryUrl = resolveRegistryUrl(args);
+  let registryUrl;
+  try {
+    registryUrl = resolveRegistryUrl(args);
+  } catch (err) {
+    error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
   const loginUrl = `${registryUrl}/login`;
 
   console.log(`Visit ${loginUrl} to get your API token, then paste it below.`);
@@ -27,7 +33,16 @@ export async function runLogin(args) {
 
   const credentials = readCredentials();
   credentials[registryUrl] = token;
-  writeCredentials(credentials);
+  try {
+    writeCredentials(credentials);
+  } catch (err) {
+    error(
+      `Failed to save credentials for ${registryUrl}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return 1;
+  }
   success(`Saved credentials for ${registryUrl}.`);
   return 0;
 }
@@ -36,14 +51,29 @@ export async function runLogin(args) {
  * Run the logout command: remove the stored credential for the resolved
  * registry URL, if any.
  * @param {string[]} args - Arguments following the "logout" command.
- * @returns {Promise<number>} Exit code (0 always; logout is informational).
+ * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
  */
 export async function runLogout(args) {
-  const registryUrl = resolveRegistryUrl(args);
+  let registryUrl;
+  try {
+    registryUrl = resolveRegistryUrl(args);
+  } catch (err) {
+    error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
   const credentials = readCredentials();
   if (Object.hasOwn(credentials, registryUrl)) {
     delete credentials[registryUrl];
-    writeCredentials(credentials);
+    try {
+      writeCredentials(credentials);
+    } catch (err) {
+      error(
+        `Failed to remove credentials for ${registryUrl}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return 1;
+    }
     success(`Removed credentials for ${registryUrl}.`);
   } else {
     warn(`No credentials were stored for ${registryUrl}.`);
@@ -140,8 +170,8 @@ function openInBrowser(url) {
     command = "open";
     args = [url];
   } else if (process.platform === "win32") {
-    command = "cmd";
-    args = ["/c", "start", "", url];
+    command = "rundll32";
+    args = ["url.dll,FileProtocolHandler", url];
   } else {
     command = "xdg-open";
     args = [url];

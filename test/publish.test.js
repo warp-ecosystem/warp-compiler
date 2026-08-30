@@ -38,7 +38,9 @@ function withConsole() {
 }
 
 function setEnv(vars) {
+  const originals = new Map();
   for (const [key, value] of Object.entries(vars)) {
+    originals.set(key, process.env[key]);
     if (value === undefined) {
       delete process.env[key];
     } else {
@@ -46,7 +48,10 @@ function setEnv(vars) {
     }
   }
   return () => {
-    for (const key of Object.keys(vars)) delete process.env[key];
+    for (const [key, original] of originals) {
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    }
   };
 }
 
@@ -379,6 +384,74 @@ test("an unreachable registry exits 1 with the attempted URL", async (t) => {
   assert.ok(
     errors.some((l) => l.includes(unreachableUrl)),
     "expected the attempted registry URL in the failure output",
+  );
+});
+
+test("a bare --registry flag is rejected instead of falling back", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const restoreEnv = setEnv({ WARP_TOKEN: "tok" });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, ["--registry"]);
+  } finally {
+    restoreEnv();
+  }
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("--registry")),
+    "expected an error about the missing --registry value",
+  );
+});
+
+test("an http registry URL is rejected for non-loopback hosts", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const restoreEnv = setEnv({ WARP_TOKEN: "tok" });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, ["--registry", "http://warp.example"]);
+  } finally {
+    restoreEnv();
+  }
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("must use https")),
+    "expected the insecure URL to be rejected in favor of https",
+  );
+});
+
+test("a stalled registry request is aborted and reported as a timeout", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, () => {});
+  const restoreEnv = setEnv({
+    WARP_TOKEN: "tok",
+    WARP_REGISTRY_URL: server.url,
+    WARP_PUBLISH_TIMEOUT_MS: "100",
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("timed out")),
+    "expected the stalled request to be reported as a timeout",
   );
 });
 
