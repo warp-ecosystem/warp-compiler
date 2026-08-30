@@ -100,6 +100,26 @@ test("login stores the pasted token under the resolved registry URL", async (t) 
   );
 });
 
+test("login normalizes a trailing slash on the resolved registry URL", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+  const restoreStdin = mockStdin("secret-token\n");
+  t.after(restoreStdin);
+
+  const code = await runLogin(["--registry", "https://registry.example/"]);
+  const { log } = finish();
+
+  assert.equal(code, 0);
+  assert.deepEqual(readCredentialsFile(), {
+    "https://registry.example": "secret-token",
+  });
+  assert.ok(
+    log.some((l) => l.includes("https://registry.example")),
+    "success should name the normalized registry URL",
+  );
+});
+
 test("login for a second registry adds a key without disturbing the first", async (t) => {
   prepareHome(t);
 

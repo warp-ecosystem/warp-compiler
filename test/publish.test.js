@@ -307,6 +307,18 @@ test("registry URL falls back to the compiled-in default", (t) => {
   }
 });
 
+test("a trailing slash on the registry URL is normalized away", () => {
+  const restoreEnv = setEnv({ WARP_REGISTRY_URL: undefined });
+  try {
+    assert.equal(
+      resolveRegistryUrl(["--registry", "https://warp.example/"]),
+      "https://warp.example",
+    );
+  } finally {
+    restoreEnv();
+  }
+});
+
 test("WARP_REGISTRY_URL overrides the compiled-in default", async (t) => {
   prepareProject(t);
   const finish = withConsole();
