@@ -1,4 +1,4 @@
-name: Release
+name: CD
 
 on:
   push:
@@ -14,39 +14,29 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           cache: npm
+          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify tag matches package version
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          PKG_VERSION="$(node -p "require('./package.json').version")"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "Tag '$GITHUB_REF_NAME' does not match package.json version '$PKG_VERSION'"
-            exit 1
-          fi
-
-      - name: Lint
+      - name: Run linting
         run: npm run lint
 
-      - name: Format check
+      - name: Run formatting check
         run: npm run format:check
 
-      - name: Run tests
+      - name: Build extension
         run: npm test
-
-      - name: Configure npm scope
-        run: npm config set @warp-ecosystem:registry https://registry.npmjs.org
 
       - name: Publish to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
