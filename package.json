@@ -7,8 +7,7 @@
     "warp-compiler": "bin/warp-compiler.js"
   },
   "repository": {
-    "type": "git",
-    "url": "git+https://github.com/warp-ecosystem/warp-compiler.git"
+    "url": "https://github.com/warp-ecosystem/warp-compiler"
   },
   "main": "src/index.js",
   "files": [
