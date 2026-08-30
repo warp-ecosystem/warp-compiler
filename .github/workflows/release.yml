@@ -29,13 +29,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify tag matches package version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag '$GITHUB_REF_NAME' does not match package.json version '$PKG_VERSION'"
+            exit 1
+          fi
+
       - name: Run linting
         run: npm run lint
 
       - name: Run formatting check
         run: npm run format:check
 
-      - name: Build extension
+      - name: Run tests
         run: npm test
 
       - name: Publish to npm
