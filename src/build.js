@@ -6,6 +6,10 @@ import prettier from "prettier";
 
 import { success, warn, error } from "./logger.js";
 
+/**
+ * Filename for the extension manifest within the source directory.
+ * @type {string}
+ */
 export const MANIFEST = "99-manifest.json";
 const ENTRY = "00-index.js";
 const SRC_DIR = "src";

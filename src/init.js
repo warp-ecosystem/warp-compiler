@@ -3,14 +3,36 @@ import path from "node:path";
 
 import { success, skipped } from "./logger.js";
 
+/**
+ * Filename for the extension manifest within the source directory.
+ * @type {string}
+ */
 export const MANIFEST_FILE = "99-manifest.json";
+
+/**
+ * Filename for the entry point within the source directory.
+ * @type {string}
+ */
 export const ENTRY_FILE = "00-index.js";
+
+/**
+ * Filename for the default asset created during project initialization.
+ * @type {string}
+ */
 export const ASSET_FILE = "hello-icon.svg";
 
+/**
+ * SVG template for the default icon asset created during project initialization.
+ * @type {string}
+ */
 export const assetTemplate = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
   <circle cx="12" cy="12" r="10" fill="#4C97FF" />
 </svg>`;
 
+/**
+ * Default manifest configuration used when initializing a new extension project.
+ * @type {object}
+ */
 export const manifestTemplate = {
   class: "HelloWorld",
   name: "It works!",
@@ -29,6 +51,10 @@ export const manifestTemplate = {
   version: "0.1.0",
 };
 
+/**
+ * Template code for the entry point file created during project initialization.
+ * @type {string}
+ */
 export const entryTemplate = `import { hello } from "./01-hello-world.js";
 
 export function getInfo() {
@@ -47,6 +73,10 @@ export function getInfo() {
 }
 `;
 
+/**
+ * Template code for the hello world example module created during project initialization.
+ * @type {string}
+ */
 export const helloWorldTemplate = `export function hello() {
   return "World!";
 }

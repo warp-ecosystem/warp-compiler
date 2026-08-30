@@ -3,7 +3,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+/**
+ * Directory name for storing Warp credentials in the user's home directory.
+ * @type {string}
+ */
 export const CREDENTIALS_DIR = ".warp";
+
+/**
+ * Filename for the credentials JSON file within the credentials directory.
+ * @type {string}
+ */
 export const CREDENTIALS_FILE = "credentials.json";
 
 /**
