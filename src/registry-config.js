@@ -60,7 +60,7 @@ function validateRegistryUrl(value) {
       `Registry URL must use https for non-loopback hosts: ${value}`,
     );
   }
-  if (url.search !== "" || url.hash !== "") {
+  if (url.search !== "" || url.hash !== "" || /[?#]$/.test(url.href)) {
     throw new Error(
       `Registry URL must not contain a query or fragment: ${value}`,
     );

@@ -466,6 +466,53 @@ test("a registry URL with a fragment is rejected", () => {
   }
 });
 
+test("a registry URL ending in an empty query delimiter is rejected", () => {
+  const restoreEnv = setEnv({ WARP_REGISTRY_URL: undefined });
+  try {
+    assert.throws(
+      () => resolveRegistryUrl(["--registry", "https://warp.example?"]),
+      /must not contain a query or fragment/,
+    );
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("a registry URL ending in an empty fragment delimiter is rejected", () => {
+  const restoreEnv = setEnv({ WARP_REGISTRY_URL: undefined });
+  try {
+    assert.throws(
+      () => resolveRegistryUrl(["--registry", "https://warp.example#"]),
+      /must not contain a query or fragment/,
+    );
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("publish rejects an empty query delimiter without reaching the registry", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, createdResponse("published"));
+  const restoreEnv = setEnv({ WARP_TOKEN: "tok" });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, ["--registry", `${server.url}?`]);
+  } finally {
+    restoreEnv();
+  }
+  finish();
+
+  assert.equal(code, 1);
+  assert.equal(
+    server.requests.length,
+    0,
+    "no malformed request should be sent",
+  );
+});
+
 test("a stalled registry request is aborted and reported as a timeout", async (t) => {
   prepareProject(t);
   const finish = withConsole();
