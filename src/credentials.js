@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,18 +34,22 @@ export function readCredentials() {
 
 /**
  * Write the credentials file atomically, creating ~/.warp and restricting
- * access to the owner only since it contains bearer tokens. The JSON is first
- * written to a temp file in the same directory (mode 0o600) and then renamed
- * over the target; any temp file left behind by a failure is removed.
+ * access to the owner only since it contains bearer tokens. The directory is
+ * confined to 0o700 (also when it already exists), the JSON is first written
+ * to a unique exclusive temp file in the same directory (mode 0o600) and then
+ * renamed over the target; any temp file left behind by a failure is removed.
  * @param {object} credentials - Map of registry URL to token.
  */
 export function writeCredentials(credentials) {
   const filePath = credentialsPath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.tmp`;
+  const directory = path.dirname(filePath);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  fs.chmodSync(directory, 0o700);
+  const tempPath = uniqueTempPath(filePath);
   try {
     fs.writeFileSync(tempPath, `${JSON.stringify(credentials, null, 2)}\n`, {
       mode: 0o600,
+      flag: "wx",
     });
     fs.renameSync(tempPath, filePath);
   } catch (err) {
@@ -55,4 +60,18 @@ export function writeCredentials(credentials) {
     }
     throw err;
   }
+}
+
+/**
+ * A unique temp file path next to the target so the rename stays on the same
+ * filesystem. The random suffix plus exclusive open avoids clobbering any file
+ * left behind by a previous failed write.
+ * @param {string} filePath - Target credentials file path.
+ * @returns {string} Unique temp file path in the same directory.
+ */
+function uniqueTempPath(filePath) {
+  return path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${randomBytes(8).toString("hex")}.tmp`,
+  );
 }
