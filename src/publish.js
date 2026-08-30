@@ -102,12 +102,21 @@ export async function runPublish(product, args) {
 
 /**
  * Timeout in milliseconds for a single publish request, including reading the
- * response body. WARP_PUBLISH_TIMEOUT_MS overrides the default.
+ * response body. WARP_PUBLISH_TIMEOUT_MS overrides the default, but only when
+ * it is a positive safe integer within the setTimeout range.
  * @returns {number} Timeout in milliseconds.
  */
 function publishTimeoutMs() {
   const raw = process.env.WARP_PUBLISH_TIMEOUT_MS;
-  if (/^\d+$/.test(String(raw)) && Number(raw) > 0) return Number(raw);
+  const parsed = Number(raw);
+  if (
+    /^\d+$/.test(String(raw)) &&
+    Number.isSafeInteger(parsed) &&
+    parsed > 0 &&
+    parsed <= 0x7fffffff
+  ) {
+    return parsed;
+  }
   return DEFAULT_PUBLISH_TIMEOUT_MS;
 }
 
