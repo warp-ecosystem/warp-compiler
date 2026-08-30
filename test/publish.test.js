@@ -441,6 +441,31 @@ test("an http registry URL is rejected for non-loopback hosts", async (t) => {
   );
 });
 
+test("a registry URL with a query is rejected", () => {
+  const restoreEnv = setEnv({ WARP_REGISTRY_URL: undefined });
+  try {
+    assert.throws(
+      () =>
+        resolveRegistryUrl(["--registry", "https://warp.example?token=abc"]),
+      /must not contain a query or fragment/,
+    );
+  } finally {
+    restoreEnv();
+  }
+});
+
+test("a registry URL with a fragment is rejected", () => {
+  const restoreEnv = setEnv({ WARP_REGISTRY_URL: undefined });
+  try {
+    assert.throws(
+      () => resolveRegistryUrl(["--registry", "https://warp.example#frag"]),
+      /must not contain a query or fragment/,
+    );
+  } finally {
+    restoreEnv();
+  }
+});
+
 test("a stalled registry request is aborted and reported as a timeout", async (t) => {
   prepareProject(t);
   const finish = withConsole();

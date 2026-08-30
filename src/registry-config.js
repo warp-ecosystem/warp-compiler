@@ -37,9 +37,10 @@ export function resolveRegistryUrl(args) {
 
 /**
  * Validate a registry URL before any token is sent to it. Rejects values that
- * are not parseable http(s) URLs, and rejects plain http for anything other
- * than loopback development hosts. Accepted URLs are normalized so the
- * canonical form never carries a trailing slash.
+ * are not parseable http(s) URLs, plain http for anything other than loopback
+ * development hosts, and query or fragment components, since endpoints are
+ * appended to the base URL. Accepted URLs are canonicalized via their href form
+ * so the result never carries default ports or a trailing slash.
  * @param {string} value - URL from the --registry flag or WARP_REGISTRY_URL.
  * @returns {string} The normalized URL when valid.
  * @throws {Error} When the URL is invalid or insecure.
@@ -59,5 +60,10 @@ function validateRegistryUrl(value) {
       `Registry URL must use https for non-loopback hosts: ${value}`,
     );
   }
-  return value.replace(/\/+$/, "");
+  if (url.search !== "" || url.hash !== "") {
+    throw new Error(
+      `Registry URL must not contain a query or fragment: ${value}`,
+    );
+  }
+  return url.href.replace(/\/+$/, "");
 }
