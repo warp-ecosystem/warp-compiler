@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/warp-ecosystem/warp-registry.git"
+    "url": "git+https://github.com/warp-ecosystem/warp-compiler.git"
   },
   "main": "src/index.js",
   "files": [
