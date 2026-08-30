@@ -1,5 +1,6 @@
 import { build, MANIFEST } from "./build.js";
-import { DEFAULT_REGISTRY_URL } from "./registry-config.js";
+import { readCredentials } from "./credentials.js";
+import { resolveRegistryUrl } from "./registry-config.js";
 import { success, error } from "./logger.js";
 
 /**
@@ -10,18 +11,18 @@ import { success, error } from "./logger.js";
  * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
  */
 export async function runPublish(product, args) {
-  const result = await build(product);
-  if (result === 1) return 1;
-
   const registryUrl = resolveRegistryUrl(args);
 
-  const token = process.env.WARP_TOKEN;
+  const token = resolveToken(registryUrl);
   if (!token) {
     error(
-      "WARP_TOKEN is not set. Set the WARP_TOKEN environment variable and try again.",
+      `No credentials found for ${registryUrl}. Set WARP_TOKEN or run '${product.bin} login' to authenticate.`,
     );
     return 1;
   }
+
+  const result = await build(product);
+  if (result === 1) return 1;
 
   let response;
   try {
@@ -68,27 +69,47 @@ export async function runPublish(product, args) {
 }
 
 /**
- * Resolve the registry URL: --registry flag, then WARP_REGISTRY_URL, then the
- * compiled-in default.
- * @param {string[]} args - Arguments following the "publish" command.
- * @returns {string} Resolved registry base URL.
+ * Resolve the authentication token: WARP_TOKEN first, then the stored
+ * credential for the registry URL.
+ * @param {string} registryUrl - Resolved registry base URL.
+ * @returns {string|undefined} Token, or undefined if none is available.
  */
-function resolveRegistryUrl(args) {
-  const flagIndex = args.indexOf("--registry");
-  if (flagIndex !== -1 && args[flagIndex + 1]) {
-    return args[flagIndex + 1];
-  }
-  return process.env.WARP_REGISTRY_URL || DEFAULT_REGISTRY_URL;
+function resolveToken(registryUrl) {
+  return process.env.WARP_TOKEN || readCredentials()[registryUrl];
 }
 
 /**
  * Handle a 201 Created response from the registry.
  * @param {Response} response - Fetch response.
- * @returns {Promise<number>} Exit code (0 for success).
+ * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
  */
 async function handleCreated(response) {
-  const data = await response.json().catch(() => ({}));
-  const { owner, id, version, status } = data;
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    error(
+      "The Warp Registry returned an unexpected response shape for a successful publish.",
+    );
+    return 1;
+  }
+
+  const { owner, id, version, status } = data || {};
+  if (
+    typeof owner !== "string" ||
+    owner.length === 0 ||
+    typeof id !== "string" ||
+    id.length === 0 ||
+    typeof version !== "string" ||
+    version.length === 0 ||
+    (status !== "published" && status !== "pending")
+  ) {
+    error(
+      "The Warp Registry returned an unexpected response shape for a successful publish.",
+    );
+    return 1;
+  }
+
   const label = `@${owner}/${id}@${version}`;
   if (status === "published") {
     success(`Published ${label}`);

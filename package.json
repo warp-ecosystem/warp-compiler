@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "node ./bin/warp-compiler.js build",
-    "test": "node --test",
+    "test": "node --test --test-isolation=none",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

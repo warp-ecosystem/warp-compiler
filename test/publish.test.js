@@ -8,7 +8,10 @@ import test from "node:test";
 import { build } from "../src/build.js";
 import { initProject } from "../src/init.js";
 import { runPublish } from "../src/publish.js";
-import { DEFAULT_REGISTRY_URL } from "../src/registry-config.js";
+import {
+  DEFAULT_REGISTRY_URL,
+  resolveRegistryUrl,
+} from "../src/registry-config.js";
 
 const PRODUCT = { bin: "warp-compiler", runtimeGlobal: "Warp" };
 const ORIG_CWD = process.cwd();
@@ -49,12 +52,29 @@ function setEnv(vars) {
 
 function prepareProject(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warp-publish-"));
-  process.chdir(dir);
+  const projectDir = path.join(dir, "project");
+  const homeDir = path.join(dir, "home");
+  fs.mkdirSync(projectDir);
+  fs.mkdirSync(homeDir);
+  process.chdir(projectDir);
   initProject("src");
+  const originalHome = process.env.HOME;
+  process.env.HOME = homeDir;
   t.after(() => {
     process.chdir(ORIG_CWD);
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
     fs.rmSync(dir, { recursive: true, force: true });
   });
+}
+
+function credsFilePath() {
+  return path.join(process.env.HOME, ".warp", "credentials.json");
+}
+
+function writeCredentialsFile(creds) {
+  fs.mkdirSync(path.dirname(credsFilePath()), { recursive: true });
+  fs.writeFileSync(credsFilePath(), JSON.stringify(creds, null, 2));
 }
 
 async function startServer(t, handler) {
@@ -105,7 +125,7 @@ function errorResponse(status, message) {
   return (req, res) => jsonResponse(res, status, { error: message });
 }
 
-test("missing WARP_TOKEN fails before any network request", async (t) => {
+test("missing credentials fail before any build or network activity", async (t) => {
   prepareProject(t);
   const finish = withConsole();
 
@@ -125,9 +145,20 @@ test("missing WARP_TOKEN fails before any network request", async (t) => {
 
   assert.equal(code, 1);
   assert.equal(server.requests.length, 0, "no request should be attempted");
+  assert.equal(
+    fs.existsSync(path.join("dist")),
+    false,
+    "no build output should be written",
+  );
+  const message = errors.find((l) => l.includes("No credentials"));
+  assert.ok(message, "expected a message about missing credentials");
   assert.ok(
-    errors.some((l) => l.includes("WARP_TOKEN is not set")),
-    "expected a message telling the user to set WARP_TOKEN",
+    message.includes("WARP_TOKEN"),
+    "message should mention WARP_TOKEN",
+  );
+  assert.ok(
+    message.includes("login"),
+    "message should suggest run <bin> login",
   );
 });
 
@@ -260,28 +291,15 @@ test("the published body bytes match what build() produced", async (t) => {
   );
 });
 
-test("registry URL falls back to the compiled-in default", async (t) => {
+test("registry URL falls back to the compiled-in default", (t) => {
   prepareProject(t);
-  const finish = withConsole();
-
-  const restoreEnv = setEnv({
-    WARP_TOKEN: "tok",
-    WARP_REGISTRY_URL: undefined,
-  });
-
-  let code;
+  const restoreEnv = setEnv({ WARP_REGISTRY_URL: undefined });
   try {
-    code = await runPublish(PRODUCT, []);
+    assert.equal(resolveRegistryUrl([]), DEFAULT_REGISTRY_URL);
+    assert.equal(DEFAULT_REGISTRY_URL, "https://warp.sdisk.us");
   } finally {
     restoreEnv();
   }
-  const { error: errors } = finish();
-
-  assert.equal(code, 1);
-  assert.ok(
-    errors.some((l) => l.includes(DEFAULT_REGISTRY_URL)),
-    "expected the default registry URL in the failure output",
-  );
 });
 
 test("WARP_REGISTRY_URL overrides the compiled-in default", async (t) => {
@@ -361,5 +379,122 @@ test("an unreachable registry exits 1 with the attempted URL", async (t) => {
   assert.ok(
     errors.some((l) => l.includes(unreachableUrl)),
     "expected the attempted registry URL in the failure output",
+  );
+});
+
+test("publish uses the stored credential when WARP_TOKEN is unset", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, createdResponse("published"));
+  writeCredentialsFile({ [server.url]: "stored-token" });
+  const restoreEnv = setEnv({
+    WARP_REGISTRY_URL: server.url,
+    WARP_TOKEN: undefined,
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  finish();
+
+  assert.equal(code, 0);
+  assert.equal(server.requests.length, 1);
+  assert.equal(server.requests[0].headers.authorization, "Bearer stored-token");
+});
+
+test("WARP_TOKEN takes precedence over the stored credential", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, createdResponse("published"));
+  writeCredentialsFile({ [server.url]: "stored-token" });
+  const restoreEnv = setEnv({
+    WARP_TOKEN: "env-token",
+    WARP_REGISTRY_URL: server.url,
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  finish();
+
+  assert.equal(code, 0);
+  assert.equal(server.requests.length, 1);
+  assert.equal(server.requests[0].headers.authorization, "Bearer env-token");
+});
+
+test("a 201 response missing status exits 1 with an unexpected shape error", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, (req, res) =>
+    jsonResponse(res, 201, {
+      owner: "testowner",
+      id: "helloworld",
+      version: "0.1.0",
+    }),
+  );
+  const restoreEnv = setEnv({
+    WARP_TOKEN: "tok",
+    WARP_REGISTRY_URL: server.url,
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  const { log, error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("unexpected response shape")),
+    "expected the unexpected response shape error",
+  );
+  assert.equal(
+    log.some((l) => l.includes("Published @")),
+    false,
+    "a broken 201 must not be reported as successful",
+  );
+});
+
+test("a 201 response with a non-JSON body exits 1 with an unexpected shape error", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, (req, res) => {
+    res.writeHead(201, { "Content-Type": "text/plain" });
+    res.end("not json");
+  });
+  const restoreEnv = setEnv({
+    WARP_TOKEN: "tok",
+    WARP_REGISTRY_URL: server.url,
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  const { log, error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("unexpected response shape")),
+    "expected the unexpected response shape error",
+  );
+  assert.equal(
+    log.some((l) => l.includes("Published @")),
+    false,
+    "a broken 201 must not be reported as successful",
   );
 });
