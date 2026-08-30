@@ -1,6 +1,6 @@
 {
   "name": "@warp-ecosystem/warp-compiler",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Compile multiple JavaScript modules into a single TurboWarp extension.",
   "type": "module",
   "bin": {
@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "node ./bin/warp-compiler.js build",
-    "test": "node --test",
+    "test": "node ./scripts/run-tests.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

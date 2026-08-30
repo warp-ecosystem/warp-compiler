@@ -6,6 +6,8 @@ import pc from "picocolors";
 
 import { initProject } from "./init.js";
 import { runBuild } from "./build.js";
+import { runPublish } from "./publish.js";
+import { runLogin, runLogout } from "./auth.js";
 import { error } from "./logger.js";
 
 /**
@@ -38,6 +40,18 @@ export async function runCli(product, argv) {
 
   if (command === "build") {
     return runBuild(product);
+  }
+
+  if (command === "publish") {
+    return runPublish(product, argv.slice(1));
+  }
+
+  if (command === "login") {
+    return runLogin(argv.slice(1));
+  }
+
+  if (command === "logout") {
+    return runLogout(argv.slice(1));
   }
 
   error(`Unknown command: ${command}`);
@@ -75,6 +89,9 @@ function printHelp(product) {
     "Commands:",
     `  ${pc.bold("init")}   Scaffold a new extension project`,
     `  ${pc.bold("build")}  Compile the extension into a single file`,
+    `  ${pc.bold("publish")}  Build and upload the extension to the Warp Registry`,
+    `  ${pc.bold("login")}   Save credentials for the Warp Registry`,
+    `  ${pc.bold("logout")}  Remove saved credentials for the Warp Registry`,
   ];
   console.log(lines.join("\n"));
 }

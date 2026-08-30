@@ -6,18 +6,34 @@ import prettier from "prettier";
 
 import { success, warn, error } from "./logger.js";
 
-const MANIFEST = "99-manifest.json";
+/**
+ * Filename for the extension manifest within the source directory.
+ * @type {string}
+ */
+export const MANIFEST = "99-manifest.json";
 const ENTRY = "00-index.js";
 const SRC_DIR = "src";
 const ASSETS_DIR = "assets";
 const DIST_DIR = "dist";
 
 /**
- * Build the extension by bundling source files and assets.
+ * Run the build command, printing the built artifact path on success.
  * @param {object} product - Product configuration object.
  * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
  */
 export async function runBuild(product) {
+  const result = await build(product);
+  if (result === 1) return 1;
+  success(`Built ${path.relative(process.cwd(), result.outputPath)}`);
+  return 0;
+}
+
+/**
+ * Build the extension by bundling source files and assets.
+ * @param {object} product - Product configuration object.
+ * @returns {Promise<object|number>} { built, outputPath } on success, or 1 on failure.
+ */
+export async function build(product) {
   const { bin, runtimeGlobal } = product;
 
   const srcDir = path.resolve(process.cwd(), SRC_DIR);
@@ -114,8 +130,7 @@ export async function runBuild(product) {
 
   runConsistencyChecks(manifest, ast);
 
-  success(`Built ${path.relative(process.cwd(), outputPath)}`);
-  return 0;
+  return { built, outputPath };
 }
 
 /**
