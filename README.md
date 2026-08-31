@@ -1,7 +1,7 @@
 # Warp Compiler (`warp-compiler`)
 
 > [!WARNING]
-> **Support for Node.js v18** Support for Node.js 18 may end soon. Warp Compiler may still work with Node.js v18, but releases may no longer test for comparability with Node.js v18. 
+> **Support for Node.js v18** Support for Node.js 18 may end soon. Warp Compiler may still work with Node.js v18, but releases may no longer test for compatability with Node.js v18.
 
 ## Overview
 
