@@ -152,7 +152,7 @@ export async function runSignup(args, { inputLines } = {}) {
 /**
  * Revokes the stored registry token and removes the local credentials.
  * @param {string[]} args - Arguments following the `logout` command.
- * @return {number} `0` if credentials are removed or none exist, `1` if removal fails.
+ * @return {Promise<number>} Resolves to `0` if credentials are removed or none exist, `1` if removal fails.
  */
 export async function runLogout(args) {
   let registryUrl;
