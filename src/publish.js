@@ -1,6 +1,7 @@
 import { build, MANIFEST } from "./build.js";
 import { readCredentials } from "./credentials.js";
 import { resolveRegistryUrl } from "./registry-config.js";
+import { readErrorMessage } from "./auth.js";
 import { success, error } from "./logger.js";
 
 /** Default deadline for a publish request, headers and body included. */
@@ -40,13 +41,17 @@ export async function runPublish(product, args) {
   try {
     let response;
     try {
-      response = await fetch(`${registryUrl}/v1/publish`, {
+      response = await fetch(`${registryUrl}/v2/publish`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/javascript",
+          "Content-Type": "application/json",
         },
-        body: result.built,
+        body: JSON.stringify({
+          id: result.manifest.id,
+          meta: result.manifest,
+          extensionBlob: result.built,
+        }),
         signal: controller.signal,
       });
     } catch (err) {
@@ -62,7 +67,15 @@ export async function runPublish(product, args) {
       return await handleCreated(response, controller);
     }
 
-    const serverMessage = await readErrorMessage(response, controller);
+    let serverMessage;
+    try {
+      serverMessage = await readErrorMessage(response, {
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (controller.signal.aborted) throw new RegistryTimeoutError();
+      throw err;
+    }
 
     if (response.status === 400) {
       error(
@@ -81,6 +94,13 @@ export async function runPublish(product, args) {
     if (response.status === 409) {
       error(
         `${serverMessage ?? `The Warp Registry reports a conflict: HTTP 409.`} — this version was already published; bumping the version in ${MANIFEST} is likely the fix.`,
+      );
+      return 1;
+    }
+
+    if (response.status === 403) {
+      error(
+        `${serverMessage ?? `The Warp Registry rejected the publish: HTTP 403.`} — a prior publish from this account is still awaiting review; only one pending publish is allowed at a time.`,
       );
       return 1;
     }
@@ -178,44 +198,52 @@ async function handleCreated(response, controller) {
     return 1;
   }
 
-  const { owner, id, version, status } = data || {};
+  let owner, id, label, approved;
+
+  const ext = data && data.extension;
   if (
-    typeof owner !== "string" ||
-    owner.length === 0 ||
-    typeof id !== "string" ||
-    id.length === 0 ||
-    typeof version !== "string" ||
-    version.length === 0 ||
-    (status !== "published" && status !== "pending")
+    ext &&
+    typeof ext.owner === "string" &&
+    ext.owner.length > 0 &&
+    typeof ext.id === "string" &&
+    ext.id.length > 0 &&
+    Array.isArray(ext.versions) &&
+    typeof ext.approved === "boolean"
   ) {
+    owner = ext.owner;
+    id = ext.id;
+    const version =
+      (ext.versions.length > 0 &&
+        typeof ext.versions[0] === "string" &&
+        ext.versions[0]) ||
+      (ext.meta && typeof ext.meta.version === "string" && ext.meta.version) ||
+      "unknown";
+    label = `@${owner}/${id}@${version}`;
+    approved = ext.approved;
+  } else if (
+    typeof (data && data.owner) === "string" &&
+    data.owner.length > 0 &&
+    typeof data.id === "string" &&
+    data.id.length > 0 &&
+    typeof data.version === "string" &&
+    data.version.length > 0 &&
+    (data.status === "published" || data.status === "pending")
+  ) {
+    owner = data.owner;
+    id = data.id;
+    label = `@${owner}/${id}@${data.version}`;
+    approved = data.status === "published";
+  } else {
     error(
       "The Warp Registry returned an unexpected response shape for a successful publish.",
     );
     return 1;
   }
 
-  const label = `@${owner}/${id}@${version}`;
-  if (status === "published") {
+  if (approved) {
     success(`Published ${label}`);
   } else {
     success(`Published ${label} (pending review — this is your first publish)`);
   }
   return 0;
-}
-
-/**
- * Extract the server-provided error message from a non-201 response.
- * @param {Response} response - Fetch response.
- * @param {AbortController} controller - Deadline controller for the request.
- * @returns {Promise<string|null>} The error message, or null if absent.
- */
-async function readErrorMessage(response, controller) {
-  try {
-    const data = await response.json();
-    if (data && typeof data.error === "string") return data.error;
-  } catch {
-    if (controller.signal.aborted) throw new RegistryTimeoutError();
-    // ignore malformed bodies
-  }
-  return null;
 }
