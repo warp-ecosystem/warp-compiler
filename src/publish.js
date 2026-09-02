@@ -239,5 +239,3 @@ async function handleCreated(response, controller) {
   }
   return 0;
 }
-
-
