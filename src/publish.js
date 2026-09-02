@@ -213,7 +213,9 @@ async function handleCreated(response, controller) {
     owner = ext.owner;
     id = ext.id;
     const version =
-      (ext.versions.length > 0 && ext.versions[0]) ||
+      (ext.versions.length > 0 &&
+        typeof ext.versions[0] === "string" &&
+        ext.versions[0]) ||
       (ext.meta && typeof ext.meta.version === "string" && ext.meta.version) ||
       "unknown";
     label = `@${owner}/${id}@${version}`;

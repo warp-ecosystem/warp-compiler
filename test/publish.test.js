@@ -734,6 +734,44 @@ test("a v1-format 201 with status pending is accepted with a distinct message", 
   );
 });
 
+test("a non-string ext.versions[0] falls back to the meta version in the label", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, (req, res) =>
+    jsonResponse(res, 201, {
+      extension: {
+        owner: "testowner",
+        id: "helloworld",
+        meta: { id: "helloworld", version: "0.5.0" },
+        versions: [42],
+        approved: true,
+      },
+      publishedUrl: "/v2/@testowner/helloworld",
+    }),
+  );
+  const restoreEnv = setEnv({
+    WARP_TOKEN: "tok",
+    WARP_REGISTRY_URL: server.url,
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  const { log } = finish();
+
+  assert.equal(code, 0);
+  const successLine = log.find((l) => l.startsWith("✓ "));
+  assert.ok(successLine, "expected a success message");
+  assert.ok(
+    successLine.includes("Published @testowner/helloworld@0.5.0"),
+    "expected the meta version in the label when versions[0] is not a string",
+  );
+});
+
 test("a 201 response with a non-JSON body exits 1 with an unexpected shape error", async (t) => {
   prepareProject(t);
   const finish = withConsole();
