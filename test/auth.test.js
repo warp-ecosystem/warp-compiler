@@ -225,18 +225,65 @@ test("an empty namespace during login writes nothing and exits 1", async (t) => 
   );
 });
 
+test("login with a non-JSON body exits 1 and does not create credentials", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("not json");
+  });
+
+  const code = await runLogin(["--registry", server.url], {
+    inputLines: ["user", "pass1234"],
+  });
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.equal(
+    fs.existsSync(credentialsFile()),
+    false,
+    "no credentials file should be written",
+  );
+  assert.ok(
+    errors.some((l) => l.includes("unexpected response")),
+    "expected the unexpected response error",
+  );
+});
+
+test("login with a JSON body missing a token exits 1 and does not create credentials", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (_req, res) => {
+    jsonResponse(res, 200, { user: { namespace: "user" } });
+  });
+
+  const code = await runLogin(["--registry", server.url], {
+    inputLines: ["user", "pass1234"],
+  });
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.equal(
+    fs.existsSync(credentialsFile()),
+    false,
+    "no credentials file should be written",
+  );
+  assert.ok(
+    errors.some((l) => l.includes("unexpected response")),
+    "expected the unexpected response error",
+  );
+});
+
 test("signup stores the token from a successful 201 response", async (t) => {
   prepareHome(t);
   const finish = withConsole();
   t.after(finish);
 
-  const server = await startServer(t, (req, res, body) => {
-    const parsed = JSON.parse(body.toString("utf8"));
-    assert.equal(req.method, "POST");
-    assert.equal(req.url, "/v2/auth/signup");
-    assert.equal(parsed.namespace, "newuser");
-    assert.equal(parsed.displayName, "New User");
-    assert.equal(parsed.password, "password123");
+  const server = await startServer(t, (_req, res) => {
     jsonResponse(res, 201, {
       user: { namespace: "newuser", displayName: "New User" },
       token: "signup-token-xyz",
@@ -255,6 +302,13 @@ test("signup stores the token from a successful 201 response", async (t) => {
     "success should name the registry URL it saved credentials for",
   );
   assert.equal(server.requests.length, 1);
+  const [request] = server.requests;
+  assert.equal(request.method, "POST");
+  assert.equal(request.url, "/v2/auth/signup");
+  const body = JSON.parse(request.body.toString("utf8"));
+  assert.equal(body.namespace, "newuser");
+  assert.equal(body.displayName, "New User");
+  assert.equal(body.password, "password123");
 });
 
 test("signup with taken namespace reports 409", async (t) => {
@@ -283,7 +337,7 @@ test("signup with short password reports 400", async (t) => {
   const finish = withConsole();
   t.after(finish);
 
-  const server = await startServer(t, (req, res) => {
+  const server = await startServer(t, (_req, res) => {
     jsonResponse(res, 400, { error: "password must be at least 8 characters" });
   });
 
@@ -299,18 +353,65 @@ test("signup with short password reports 400", async (t) => {
   );
 });
 
+test("signup with a non-JSON body exits 1 and does not create credentials", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (_req, res) => {
+    res.writeHead(201, { "Content-Type": "text/plain" });
+    res.end("not json");
+  });
+
+  const code = await runSignup(["--registry", server.url], {
+    inputLines: ["newuser", "", "password123"],
+  });
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.equal(
+    fs.existsSync(credentialsFile()),
+    false,
+    "no credentials file should be written",
+  );
+  assert.ok(
+    errors.some((l) => l.includes("unexpected response")),
+    "expected the unexpected response error",
+  );
+});
+
+test("signup with a JSON body missing a token exits 1 and does not create credentials", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (_req, res) => {
+    jsonResponse(res, 201, { user: { namespace: "newuser" } });
+  });
+
+  const code = await runSignup(["--registry", server.url], {
+    inputLines: ["newuser", "", "password123"],
+  });
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.equal(
+    fs.existsSync(credentialsFile()),
+    false,
+    "no credentials file should be written",
+  );
+  assert.ok(
+    errors.some((l) => l.includes("unexpected response")),
+    "expected the unexpected response error",
+  );
+});
+
 test("signup with empty display name omits it from the request body", async (t) => {
   prepareHome(t);
   const finish = withConsole();
   t.after(finish);
 
-  const server = await startServer(t, (req, res, body) => {
-    const parsed = JSON.parse(body.toString("utf8"));
-    assert.equal(
-      parsed.displayName,
-      undefined,
-      "displayName should be omitted when empty",
-    );
+  const server = await startServer(t, (_req, res) => {
     jsonResponse(res, 201, {
       user: { namespace: "newuser" },
       token: "tok-nodisplay",
@@ -324,6 +425,13 @@ test("signup with empty display name omits it from the request body", async (t) 
 
   assert.equal(code, 0);
   assert.deepEqual(readCredentialsFile(), { [server.url]: "tok-nodisplay" });
+  const [request] = server.requests;
+  const body = JSON.parse(request.body.toString("utf8"));
+  assert.equal(
+    body.displayName,
+    undefined,
+    "displayName should be omitted when empty",
+  );
 });
 
 test("logout calls the server before removing credentials", async (t) => {
