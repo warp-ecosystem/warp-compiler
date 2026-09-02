@@ -4,6 +4,9 @@ import { resolveRegistryUrl } from "./registry-config.js";
 import { readCredentials, writeCredentials } from "./credentials.js";
 import { error, success, warn } from "./logger.js";
 
+/** Timeout in milliseconds for registry authentication requests. */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
 /**
  * Authenticate with the registry and save the returned credentials.
  * @param {string[]} args - Arguments following the `login` command.
@@ -32,47 +35,24 @@ export async function runLogin(args, { inputLines } = {}) {
   }
 
   let response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(`${registryUrl}/v2/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ namespace, password }),
+      signal: controller.signal,
     });
   } catch {
     error(`Could not reach the Warp Registry at ${registryUrl}.`);
     return 1;
+  } finally {
+    clearTimeout(timer);
   }
 
   if (response.status === 200) {
-    let data;
-    try {
-      data = await response.json();
-    } catch {
-      error(
-        "The Warp Registry returned an unexpected response for a successful login.",
-      );
-      return 1;
-    }
-    if (typeof data.token !== "string" || !data.token) {
-      error(
-        "The Warp Registry returned an unexpected response for a successful login.",
-      );
-      return 1;
-    }
-    const credentials = readCredentials();
-    credentials[registryUrl] = data.token;
-    try {
-      writeCredentials(credentials);
-    } catch (err) {
-      error(
-        `Failed to save credentials for ${registryUrl}: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-      return 1;
-    }
-    success(`Saved credentials for ${registryUrl}.`);
-    return 0;
+    return handleSuccessResponse(registryUrl, response, "login");
   }
 
   const serverMessage = await readErrorMessage(response);
@@ -122,47 +102,24 @@ export async function runSignup(args, { inputLines } = {}) {
   if (displayName) body.displayName = displayName;
 
   let response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(`${registryUrl}/v2/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
   } catch {
     error(`Could not reach the Warp Registry at ${registryUrl}.`);
     return 1;
+  } finally {
+    clearTimeout(timer);
   }
 
   if (response.status === 201) {
-    let data;
-    try {
-      data = await response.json();
-    } catch {
-      error(
-        "The Warp Registry returned an unexpected response for a successful signup.",
-      );
-      return 1;
-    }
-    if (typeof data.token !== "string" || !data.token) {
-      error(
-        "The Warp Registry returned an unexpected response for a successful signup.",
-      );
-      return 1;
-    }
-    const credentials = readCredentials();
-    credentials[registryUrl] = data.token;
-    try {
-      writeCredentials(credentials);
-    } catch (err) {
-      error(
-        `Failed to save credentials for ${registryUrl}: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-      return 1;
-    }
-    success(`Saved credentials for ${registryUrl}.`);
-    return 0;
+    return handleSuccessResponse(registryUrl, response, "signup");
   }
 
   const serverMessage = await readErrorMessage(response);
@@ -199,10 +156,18 @@ export async function runLogout(args) {
   }
 
   try {
-    const response = await fetch(`${registryUrl}/v2/auth/logout`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(`${registryUrl}/v2/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (response.status !== 200) {
       warn(
         `Could not revoke token on the server (HTTP ${response.status}); removing local credentials anyway.`,
@@ -230,15 +195,62 @@ export async function runLogout(args) {
 }
 
 /**
+ * Handle a successful authentication response: parse the token, merge it into
+ * stored credentials, and report success.
+ * @param {string} registryUrl - Resolved registry base URL.
+ * @param {Response} response - Fetch response.
+ * @param {string} label - "login" or "signup" for user-facing messages.
+ * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
+ */
+async function handleSuccessResponse(registryUrl, response, label) {
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    error(
+      `The Warp Registry returned an unexpected response for a successful ${label}.`,
+    );
+    return 1;
+  }
+  if (
+    !data ||
+    typeof data !== "object" ||
+    typeof data.token !== "string" ||
+    !data.token
+  ) {
+    error(
+      `The Warp Registry returned an unexpected response for a successful ${label}.`,
+    );
+    return 1;
+  }
+  const credentials = readCredentials();
+  credentials[registryUrl] = data.token;
+  try {
+    writeCredentials(credentials);
+  } catch (err) {
+    error(
+      `Failed to save credentials for ${registryUrl}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return 1;
+  }
+  success(`Saved credentials for ${registryUrl}.`);
+  return 0;
+}
+
+/**
  * Extract the server-provided error message from a non-success response.
  * @param {Response} response - Fetch response.
+ * @param {{ signal?: AbortSignal }} [options] - Optional abort signal for timeout detection.
  * @returns {Promise<string|null>} The error message, or null if absent.
  */
-async function readErrorMessage(response) {
+export async function readErrorMessage(response, { signal } = {}) {
   try {
     const data = await response.json();
     if (data && typeof data.error === "string") return data.error;
   } catch {
+    if (signal && signal.aborted) throw signal.reason;
     // ignore malformed bodies
   }
   return null;

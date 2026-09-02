@@ -92,12 +92,7 @@ test("login stores the token from a successful API response", async (t) => {
   const finish = withConsole();
   t.after(finish);
 
-  const server = await startServer(t, (req, res, body) => {
-    const parsed = JSON.parse(body.toString("utf8"));
-    assert.equal(req.method, "POST");
-    assert.equal(req.url, "/v2/auth/login");
-    assert.equal(parsed.namespace, "testuser");
-    assert.equal(parsed.password, "secret123");
+  const server = await startServer(t, (_req, res) => {
     jsonResponse(res, 200, {
       user: { namespace: "testuser", displayName: "Test User" },
       token: "api-token-abc",
@@ -123,6 +118,12 @@ test("login stores the token from a successful API response", async (t) => {
     "success should name the registry URL it saved credentials for",
   );
   assert.equal(server.requests.length, 1);
+  const [request] = server.requests;
+  assert.equal(request.method, "POST");
+  assert.equal(request.url, "/v2/auth/login");
+  const parsed = JSON.parse(request.body.toString("utf8"));
+  assert.equal(parsed.namespace, "testuser");
+  assert.equal(parsed.password, "secret123");
 });
 
 test("login with wrong password reports 401", async (t) => {

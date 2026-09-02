@@ -1,6 +1,7 @@
 import { build, MANIFEST } from "./build.js";
 import { readCredentials } from "./credentials.js";
 import { resolveRegistryUrl } from "./registry-config.js";
+import { readErrorMessage } from "./auth.js";
 import { success, error } from "./logger.js";
 
 /** Default deadline for a publish request, headers and body included. */
@@ -66,7 +67,9 @@ export async function runPublish(product, args) {
       return await handleCreated(response, controller);
     }
 
-    const serverMessage = await readErrorMessage(response, controller);
+    const serverMessage = await readErrorMessage(response, {
+      signal: controller.signal,
+    });
 
     if (response.status === 400) {
       error(
@@ -237,19 +240,4 @@ async function handleCreated(response, controller) {
   return 0;
 }
 
-/**
- * Extract the server-provided error message from a non-201 response.
- * @param {Response} response - Fetch response.
- * @param {AbortController} controller - Deadline controller for the request.
- * @returns {Promise<string|null>} The error message, or null if absent.
- */
-async function readErrorMessage(response, controller) {
-  try {
-    const data = await response.json();
-    if (data && typeof data.error === "string") return data.error;
-  } catch {
-    if (controller.signal.aborted) throw new RegistryTimeoutError();
-    // ignore malformed bodies
-  }
-  return null;
-}
+
