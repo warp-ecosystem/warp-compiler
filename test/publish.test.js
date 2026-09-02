@@ -556,13 +556,27 @@ test("a stalled non-201 error body is reported as a timeout, not a raw abort", a
   prepareProject(t);
   const finish = withConsole();
 
-  const server = await startServer(t, (_req, res) => {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.flushHeaders();
+  t.mock.method(globalThis, "fetch", (_url, options) => {
+    const signal = options && options.signal;
+    return Promise.resolve({
+      status: 400,
+      async json() {
+        await new Promise((resolve) => {
+          if (signal && signal.aborted) {
+            resolve();
+            return;
+          }
+          signal && signal.addEventListener("abort", resolve, { once: true });
+        });
+        throw (
+          (signal && signal.reason) || new DOMException("Aborted", "AbortError")
+        );
+      },
+    });
   });
   const restoreEnv = setEnv({
     WARP_TOKEN: "tok",
-    WARP_REGISTRY_URL: server.url,
+    WARP_REGISTRY_URL: "https://registry.example",
     WARP_PUBLISH_TIMEOUT_MS: "100",
   });
 
