@@ -46,24 +46,32 @@ export async function runLogin(args, { inputLines } = {}) {
     });
   } catch {
     error(`Could not reach the Warp Registry at ${registryUrl}.`);
-    return 1;
-  } finally {
     clearTimeout(timer);
-  }
-
-  if (response.status === 200) {
-    return handleSuccessResponse(registryUrl, response, "login");
-  }
-
-  const serverMessage = await readErrorMessage(response);
-  if (response.status === 401) {
-    error(
-      `${serverMessage ?? "Invalid credentials."} — check your namespace and password.`,
-    );
     return 1;
   }
-  error(`Unexpected response from the Warp Registry: HTTP ${response.status}.`);
-  return 1;
+
+  let result;
+  if (response.status === 200) {
+    result = await handleSuccessResponse(registryUrl, response, "login", {
+      signal: controller.signal,
+    });
+  } else {
+    const serverMessage = await readErrorMessage(response, {
+      signal: controller.signal,
+    });
+    if (response.status === 401) {
+      error(
+        `${serverMessage ?? "Invalid credentials."} — check your namespace and password.`,
+      );
+    } else {
+      error(
+        `Unexpected response from the Warp Registry: HTTP ${response.status}.`,
+      );
+    }
+    result = 1;
+  }
+  clearTimeout(timer);
+  return result;
 }
 
 /**
@@ -113,26 +121,32 @@ export async function runSignup(args, { inputLines } = {}) {
     });
   } catch {
     error(`Could not reach the Warp Registry at ${registryUrl}.`);
-    return 1;
-  } finally {
     clearTimeout(timer);
+    return 1;
   }
 
+  let result;
   if (response.status === 201) {
-    return handleSuccessResponse(registryUrl, response, "signup");
+    result = await handleSuccessResponse(registryUrl, response, "signup", {
+      signal: controller.signal,
+    });
+  } else {
+    const serverMessage = await readErrorMessage(response, {
+      signal: controller.signal,
+    });
+    if (response.status === 409) {
+      error(`${serverMessage ?? "Namespace already taken."}`);
+    } else if (response.status === 400) {
+      error(`${serverMessage ?? "Validation failed."}`);
+    } else {
+      error(
+        `Unexpected response from the Warp Registry: HTTP ${response.status}.`,
+      );
+    }
+    result = 1;
   }
-
-  const serverMessage = await readErrorMessage(response);
-  if (response.status === 409) {
-    error(`${serverMessage ?? "Namespace already taken."}`);
-    return 1;
-  }
-  if (response.status === 400) {
-    error(`${serverMessage ?? "Validation failed."}`);
-    return 1;
-  }
-  error(`Unexpected response from the Warp Registry: HTTP ${response.status}.`);
-  return 1;
+  clearTimeout(timer);
+  return result;
 }
 
 /**
@@ -202,11 +216,17 @@ export async function runLogout(args) {
  * @param {string} label - "login" or "signup" for user-facing messages.
  * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
  */
-async function handleSuccessResponse(registryUrl, response, label) {
+async function handleSuccessResponse(
+  registryUrl,
+  response,
+  label,
+  { signal } = {},
+) {
   let data;
   try {
     data = await response.json();
   } catch {
+    if (signal && signal.aborted) throw signal.reason;
     error(
       `The Warp Registry returned an unexpected response for a successful ${label}.`,
     );

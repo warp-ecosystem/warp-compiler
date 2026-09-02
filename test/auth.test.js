@@ -5,7 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { runLogin, runSignup, runLogout } from "../src/auth.js";
+import {
+  runLogin,
+  runSignup,
+  runLogout,
+  REQUEST_TIMEOUT_MS,
+} from "../src/auth.js";
 
 const ORIG_HOME = process.env.HOME;
 
@@ -13,6 +18,21 @@ const ESCAPE = String.fromCharCode(27);
 
 function stripAnsi(s) {
   return s.replace(new RegExp(`${ESCAPE}\\[[0-9;]*m`, "g"), "");
+}
+
+function withShortenedTimeout() {
+  const realSetTimeout = global.setTimeout;
+  global.setTimeout = (fn, delay, ...args) => {
+    if (delay === REQUEST_TIMEOUT_MS) delay = 50;
+    return realSetTimeout(fn, delay, ...args);
+  };
+  return () => {
+    global.setTimeout = realSetTimeout;
+  };
+}
+
+function abortError() {
+  return (err) => err instanceof DOMException && err.name === "AbortError";
 }
 
 function withConsole() {
@@ -124,6 +144,26 @@ test("login stores the token from a successful API response", async (t) => {
   const parsed = JSON.parse(request.body.toString("utf8"));
   assert.equal(parsed.namespace, "testuser");
   assert.equal(parsed.password, "secret123");
+});
+
+test("login aborts a stalled success response body instead of hanging", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+  const restore = withShortenedTimeout();
+  t.after(restore);
+
+  const server = await startServer(t, (_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.flushHeaders();
+  });
+
+  await assert.rejects(
+    runLogin(["--registry", server.url], {
+      inputLines: ["testuser", "secret123"],
+    }),
+    abortError(),
+  );
 });
 
 test("login with wrong password reports 401", async (t) => {
@@ -310,6 +350,26 @@ test("signup stores the token from a successful 201 response", async (t) => {
   assert.equal(body.namespace, "newuser");
   assert.equal(body.displayName, "New User");
   assert.equal(body.password, "password123");
+});
+
+test("signup aborts a stalled error response body instead of hanging", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+  const restore = withShortenedTimeout();
+  t.after(restore);
+
+  const server = await startServer(t, (_req, res) => {
+    res.writeHead(409, { "Content-Type": "application/json" });
+    res.flushHeaders();
+  });
+
+  await assert.rejects(
+    runSignup(["--registry", server.url], {
+      inputLines: ["newuser", "", "password123"],
+    }),
+    abortError(),
+  );
 });
 
 test("signup with taken namespace reports 409", async (t) => {
