@@ -5,11 +5,10 @@ import { readCredentials, writeCredentials } from "./credentials.js";
 import { error, success, warn } from "./logger.js";
 
 /**
- * Run the login command: prompt for namespace and password, then exchange
- * them for a token via POST /v2/auth/login.
- * @param {string[]} args - Arguments following the "login" command.
- * @param {{ inputLines?: string[] }} [options] - Internal options (e.g. pre-read lines for testing).
- * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
+ * Authenticate with the registry and save the returned credentials.
+ * @param {string[]} args - Arguments following the `login` command.
+ * @param {{ inputLines?: string[] }} [options] - Optional input lines used instead of interactive input.
+ * @return {Promise<number>} `0` on success, `1` on failure.
  */
 export async function runLogin(args, { inputLines } = {}) {
   let registryUrl;
@@ -180,10 +179,9 @@ export async function runSignup(args, { inputLines } = {}) {
 }
 
 /**
- * Run the logout command: revoke the token server-side via POST /v2/auth/logout,
- * then remove the stored credential.
- * @param {string[]} args - Arguments following the "logout" command.
- * @returns {Promise<number>} Exit code (0 for success, 1 for failure).
+ * Revokes the stored registry token and removes the local credentials.
+ * @param {string[]} args - Arguments following the `logout` command.
+ * @return {number} `0` if credentials are removed or none exist, `1` if removal fails.
  */
 export async function runLogout(args) {
   let registryUrl;
@@ -247,11 +245,9 @@ async function readErrorMessage(response) {
 }
 
 /**
- * Prompt the user for a line of input. On a TTY the input is read with local
- * echo disabled; when mask is true, asterisks are displayed instead of the
- * typed characters. On piped (non-TTY) input a plain readline prompt is used.
+ * Reads a line of input from supplied lines, standard input, or an interactive terminal.
  * @param {string} question - Prompt text.
- * @param {{ mask?: boolean, inputLines?: string[] }} [options] - Prompt options.
+ * @param {{ mask?: boolean, inputLines?: string[] }} [options] - Input options.
  * @returns {Promise<string>} The entered line.
  */
 function promptLine(question, { mask = false, inputLines } = {}) {

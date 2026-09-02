@@ -11,10 +11,10 @@ import { runLogin, runLogout, runSignup } from "./auth.js";
 import { error } from "./logger.js";
 
 /**
- * Run the CLI with the given product configuration and command-line arguments.
- * @param {object} product - Product configuration object.
- * @param {string[]} argv - Command-line arguments.
- * @returns {Promise<number>} Exit code.
+ * Dispatch a CLI command using the provided product configuration.
+ * @param {object} product - Product metadata and CLI configuration.
+ * @param {string[]} argv - Command-line arguments, including the command.
+ * @return {number} The exit code: `0` for successful commands and `1` for unknown commands or failed operations.
  */
 export async function runCli(product, argv) {
   const command = argv[0];

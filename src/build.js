@@ -29,9 +29,9 @@ export async function runBuild(product) {
 }
 
 /**
- * Build the extension by bundling source files and assets.
- * @param {object} product - Product configuration object.
- * @returns {Promise<object|number>} { built, outputPath, manifest } on success, or 1 on failure.
+ * Build the extension by bundling its source files and referenced assets.
+ * @param {object} product - Product configuration, including the executable name and runtime global.
+ * @return {object|number} Build metadata containing `built`, `outputPath`, and `manifest`, or `1` when the build fails.
  */
 export async function build(product) {
   const { bin, runtimeGlobal } = product;
