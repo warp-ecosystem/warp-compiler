@@ -297,7 +297,10 @@ test("the published body bytes match what build() produced", async (t) => {
   assert.equal(request.headers["content-type"], "application/json");
   const body = JSON.parse(request.body.toString("utf8"));
   assert.equal(body.id, "helloworld");
-  assert.ok(body.meta && typeof body.meta === "object", "body.meta must be an object");
+  assert.ok(
+    body.meta && typeof body.meta === "object",
+    "body.meta must be an object",
+  );
   assert.equal(body.meta.id, "helloworld");
   assert.equal(
     body.extensionBlob,

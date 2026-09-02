@@ -110,9 +110,7 @@ test("login stores the token from a successful API response", async (t) => {
   const { log } = finish();
 
   assert.equal(code, 0);
-  assert.deepEqual(readCredentialsFile(), {
-    [server.url]: "api-token-abc",
-  });
+  assert.deepEqual(readCredentialsFile(), { [server.url]: "api-token-abc" });
 
   const all = [...log].join("\n");
   assert.equal(
@@ -169,9 +167,7 @@ test("login normalizes a trailing slash on the resolved registry URL", async (t)
 
   assert.equal(code, 0);
   const normalizedUrl = server.url;
-  assert.deepEqual(readCredentialsFile(), {
-    [normalizedUrl]: "tok-123",
-  });
+  assert.deepEqual(readCredentialsFile(), { [normalizedUrl]: "tok-123" });
   assert.ok(
     log.some((l) => l.includes(normalizedUrl)),
     "success should name the normalized registry URL",
@@ -253,9 +249,7 @@ test("signup stores the token from a successful 201 response", async (t) => {
   const { log } = finish();
 
   assert.equal(code, 0);
-  assert.deepEqual(readCredentialsFile(), {
-    [server.url]: "signup-token-xyz",
-  });
+  assert.deepEqual(readCredentialsFile(), { [server.url]: "signup-token-xyz" });
   assert.ok(
     log.some((l) => l.includes(server.url)),
     "success should name the registry URL it saved credentials for",
@@ -290,9 +284,7 @@ test("signup with short password reports 400", async (t) => {
   t.after(finish);
 
   const server = await startServer(t, (req, res) => {
-    jsonResponse(res, 400, {
-      error: "password must be at least 8 characters",
-    });
+    jsonResponse(res, 400, { error: "password must be at least 8 characters" });
   });
 
   const code = await runSignup(["--registry", server.url], {
@@ -331,9 +323,7 @@ test("signup with empty display name omits it from the request body", async (t) 
   finish();
 
   assert.equal(code, 0);
-  assert.deepEqual(readCredentialsFile(), {
-    [server.url]: "tok-nodisplay",
-  });
+  assert.deepEqual(readCredentialsFile(), { [server.url]: "tok-nodisplay" });
 });
 
 test("logout calls the server before removing credentials", async (t) => {
@@ -341,11 +331,7 @@ test("logout calls the server before removing credentials", async (t) => {
 
   let logoutRequest = null;
   const server = await startServer(t, (req, res) => {
-    logoutRequest = {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-    };
+    logoutRequest = { method: req.method, url: req.url, headers: req.headers };
     jsonResponse(res, 200, {});
   });
   writeCredentialsFile({

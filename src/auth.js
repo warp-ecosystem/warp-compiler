@@ -83,9 +83,7 @@ export async function runLogin(args, { inputLines } = {}) {
     );
     return 1;
   }
-  error(
-    `Unexpected response from the Warp Registry: HTTP ${response.status}.`,
-  );
+  error(`Unexpected response from the Warp Registry: HTTP ${response.status}.`);
   return 1;
 }
 
@@ -177,9 +175,7 @@ export async function runSignup(args, { inputLines } = {}) {
     error(`${serverMessage ?? "Validation failed."}`);
     return 1;
   }
-  error(
-    `Unexpected response from the Warp Registry: HTTP ${response.status}.`,
-  );
+  error(`Unexpected response from the Warp Registry: HTTP ${response.status}.`);
   return 1;
 }
 
@@ -260,13 +256,14 @@ async function readErrorMessage(response) {
  */
 function promptLine(question, { mask = false, inputLines } = {}) {
   return new Promise((resolve) => {
+    if (inputLines && inputLines.length > 0) {
+      resolve(inputLines.shift());
+      return;
+    }
+
     const stdin = process.stdin;
 
     if (!stdin.isTTY) {
-      if (inputLines && inputLines.length > 0) {
-        resolve(inputLines.shift());
-        return;
-      }
       const rl = readline.createInterface({
         input: stdin,
         output: process.stdout,
@@ -325,9 +322,7 @@ function promptLine(question, { mask = false, inputLines } = {}) {
         .join("");
       if (!accepted) return;
       value += accepted;
-      process.stdout.write(
-        mask ? "*".repeat([...accepted].length) : accepted,
-      );
+      process.stdout.write(mask ? "*".repeat([...accepted].length) : accepted);
     };
     stdin.on("keypress", onKeypress);
   });
