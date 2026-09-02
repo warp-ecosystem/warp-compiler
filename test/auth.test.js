@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
 import test from "node:test";
 
-import { runLogin, runLogout } from "../src/auth.js";
+import { runLogin, runSignup, runLogout } from "../src/auth.js";
 
 const ORIG_HOME = process.env.HOME;
 
@@ -41,25 +41,6 @@ function prepareHome(t) {
   return dir;
 }
 
-let originalStdinDescriptor;
-
-function mockStdin(text) {
-  if (originalStdinDescriptor === undefined) {
-    originalStdinDescriptor = Object.getOwnPropertyDescriptor(process, "stdin");
-  }
-  Object.defineProperty(process, "stdin", {
-    configurable: true,
-    value: Readable.from([text]),
-  });
-  return () => {
-    if (originalStdinDescriptor) {
-      Object.defineProperty(process, "stdin", originalStdinDescriptor);
-    } else {
-      delete process.stdin;
-    }
-  };
-}
-
 function credentialsFile() {
   return path.join(process.env.HOME, ".warp", "credentials.json");
 }
@@ -73,30 +54,102 @@ function writeCredentialsFile(creds) {
   fs.writeFileSync(credentialsFile(), JSON.stringify(creds, null, 2));
 }
 
-test("login stores the pasted token under the resolved registry URL", async (t) => {
+function jsonResponse(res, status, body) {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(body));
+}
+
+async function startServer(t, handler) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      const body = Buffer.concat(chunks);
+      requests.push({
+        method: req.method,
+        url: req.url,
+        headers: req.headers,
+        body,
+      });
+      handler(req, res, body);
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        server.close(resolve);
+        server.closeAllConnections();
+      }),
+  );
+  return { url: `http://127.0.0.1:${port}`, requests };
+}
+
+test("login stores the token from a successful API response", async (t) => {
   prepareHome(t);
   const finish = withConsole();
   t.after(finish);
-  const restoreStdin = mockStdin("secret-token\n");
-  t.after(restoreStdin);
 
-  const code = await runLogin(["--registry", "https://registry.one.example"]);
-  const { log, error: errors } = finish();
+  const server = await startServer(t, (req, res, body) => {
+    const parsed = JSON.parse(body.toString("utf8"));
+    assert.equal(req.method, "POST");
+    assert.equal(req.url, "/v2/auth/login");
+    assert.equal(parsed.namespace, "testuser");
+    assert.equal(parsed.password, "secret123");
+    jsonResponse(res, 200, {
+      user: { namespace: "testuser", displayName: "Test User" },
+      token: "api-token-abc",
+    });
+  });
+
+  const code = await runLogin(["--registry", server.url], {
+    inputLines: ["testuser", "secret123"],
+  });
+  const { log } = finish();
 
   assert.equal(code, 0);
   assert.deepEqual(readCredentialsFile(), {
-    "https://registry.one.example": "secret-token",
+    [server.url]: "api-token-abc",
   });
 
-  const all = [...log, ...errors].join("\n");
+  const all = [...log].join("\n");
   assert.equal(
-    all.includes("secret-token"),
+    all.includes("api-token-abc"),
     false,
     "the token must never be printed in output",
   );
   assert.ok(
-    log.some((l) => l.includes("https://registry.one.example")),
+    log.some((l) => l.includes(server.url)),
     "success should name the registry URL it saved credentials for",
+  );
+  assert.equal(server.requests.length, 1);
+});
+
+test("login with wrong password reports 401", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (req, res) => {
+    jsonResponse(res, 401, { error: "invalid credentials" });
+  });
+
+  const code = await runLogin(["--registry", server.url], {
+    inputLines: ["testuser", "wrongpass"],
+  });
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("invalid credentials")),
+    "expected the server error in output",
+  );
+  assert.equal(
+    fs.existsSync(credentialsFile()),
+    false,
+    "no credentials file should be written on failure",
   );
 });
 
@@ -104,18 +157,23 @@ test("login normalizes a trailing slash on the resolved registry URL", async (t)
   prepareHome(t);
   const finish = withConsole();
   t.after(finish);
-  const restoreStdin = mockStdin("secret-token\n");
-  t.after(restoreStdin);
 
-  const code = await runLogin(["--registry", "https://registry.example/"]);
+  const server = await startServer(t, (req, res) => {
+    jsonResponse(res, 200, { user: {}, token: "tok-123" });
+  });
+
+  const code = await runLogin(["--registry", `${server.url}/`], {
+    inputLines: ["user", "pass1234"],
+  });
   const { log } = finish();
 
   assert.equal(code, 0);
+  const normalizedUrl = server.url;
   assert.deepEqual(readCredentialsFile(), {
-    "https://registry.example": "secret-token",
+    [normalizedUrl]: "tok-123",
   });
   assert.ok(
-    log.some((l) => l.includes("https://registry.example")),
+    log.some((l) => l.includes(normalizedUrl)),
     "success should name the normalized registry URL",
   );
 });
@@ -123,28 +181,40 @@ test("login normalizes a trailing slash on the resolved registry URL", async (t)
 test("login for a second registry adds a key without disturbing the first", async (t) => {
   prepareHome(t);
 
-  const restoreStdinA = mockStdin("token-a\n");
-  t.after(restoreStdinA);
-  assert.equal(await runLogin(["--registry", "https://registry-a.example"]), 0);
+  const serverA = await startServer(t, (req, res) => {
+    jsonResponse(res, 200, { user: {}, token: "token-a" });
+  });
+  assert.equal(
+    await runLogin(["--registry", serverA.url], {
+      inputLines: ["usera", "passa1234"],
+    }),
+    0,
+  );
 
-  const restoreStdinB = mockStdin("token-b\n");
-  t.after(restoreStdinB);
-  assert.equal(await runLogin(["--registry", "https://registry-b.example"]), 0);
+  const serverB = await startServer(t, (req, res) => {
+    jsonResponse(res, 200, { user: {}, token: "token-b" });
+  });
+  assert.equal(
+    await runLogin(["--registry", serverB.url], {
+      inputLines: ["userb", "passb1234"],
+    }),
+    0,
+  );
 
   assert.deepEqual(readCredentialsFile(), {
-    "https://registry-a.example": "token-a",
-    "https://registry-b.example": "token-b",
+    [serverA.url]: "token-a",
+    [serverB.url]: "token-b",
   });
 });
 
-test("an empty paste during login writes nothing and exits 1", async (t) => {
+test("an empty namespace during login writes nothing and exits 1", async (t) => {
   prepareHome(t);
   const finish = withConsole();
   t.after(finish);
-  const restoreStdin = mockStdin("   \n");
-  t.after(restoreStdin);
 
-  const code = await runLogin(["--registry", "https://registry.example"]);
+  const code = await runLogin(["--registry", "https://registry.example"], {
+    inputLines: ["", "password123"],
+  });
   const { error: errors } = finish();
 
   assert.equal(code, 1);
@@ -154,25 +224,146 @@ test("an empty paste during login writes nothing and exits 1", async (t) => {
     "no credentials file should be written",
   );
   assert.ok(
-    errors.some((l) => l.includes("No token entered")),
-    "expected an error about the empty paste",
+    errors.some((l) => l.includes("No namespace entered")),
+    "expected an error about the empty namespace",
   );
 });
 
-test("logout removes only the matching URL's entry", async (t) => {
+test("signup stores the token from a successful 201 response", async (t) => {
   prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (req, res, body) => {
+    const parsed = JSON.parse(body.toString("utf8"));
+    assert.equal(req.method, "POST");
+    assert.equal(req.url, "/v2/auth/signup");
+    assert.equal(parsed.namespace, "newuser");
+    assert.equal(parsed.displayName, "New User");
+    assert.equal(parsed.password, "password123");
+    jsonResponse(res, 201, {
+      user: { namespace: "newuser", displayName: "New User" },
+      token: "signup-token-xyz",
+    });
+  });
+
+  const code = await runSignup(["--registry", server.url], {
+    inputLines: ["newuser", "New User", "password123"],
+  });
+  const { log } = finish();
+
+  assert.equal(code, 0);
+  assert.deepEqual(readCredentialsFile(), {
+    [server.url]: "signup-token-xyz",
+  });
+  assert.ok(
+    log.some((l) => l.includes(server.url)),
+    "success should name the registry URL it saved credentials for",
+  );
+  assert.equal(server.requests.length, 1);
+});
+
+test("signup with taken namespace reports 409", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (req, res) => {
+    jsonResponse(res, 409, { error: "namespace already taken" });
+  });
+
+  const code = await runSignup(["--registry", server.url], {
+    inputLines: ["takenuser", "", "password123"],
+  });
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("namespace already taken")),
+    "expected the server error about taken namespace",
+  );
+});
+
+test("signup with short password reports 400", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (req, res) => {
+    jsonResponse(res, 400, {
+      error: "password must be at least 8 characters",
+    });
+  });
+
+  const code = await runSignup(["--registry", server.url], {
+    inputLines: ["newuser", "", "short"],
+  });
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("password must be at least 8 characters")),
+    "expected the server validation error",
+  );
+});
+
+test("signup with empty display name omits it from the request body", async (t) => {
+  prepareHome(t);
+  const finish = withConsole();
+  t.after(finish);
+
+  const server = await startServer(t, (req, res, body) => {
+    const parsed = JSON.parse(body.toString("utf8"));
+    assert.equal(
+      parsed.displayName,
+      undefined,
+      "displayName should be omitted when empty",
+    );
+    jsonResponse(res, 201, {
+      user: { namespace: "newuser" },
+      token: "tok-nodisplay",
+    });
+  });
+
+  const code = await runSignup(["--registry", server.url], {
+    inputLines: ["newuser", "", "password123"],
+  });
+  finish();
+
+  assert.equal(code, 0);
+  assert.deepEqual(readCredentialsFile(), {
+    [server.url]: "tok-nodisplay",
+  });
+});
+
+test("logout calls the server before removing credentials", async (t) => {
+  prepareHome(t);
+
+  let logoutRequest = null;
+  const server = await startServer(t, (req, res) => {
+    logoutRequest = {
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+    };
+    jsonResponse(res, 200, {});
+  });
   writeCredentialsFile({
-    "https://registry-a.example": "token-a",
+    [server.url]: "token-a",
     "https://registry-b.example": "token-b",
   });
 
   const finish = withConsole();
   t.after(finish);
-  const code = await runLogout(["--registry", "https://registry-a.example"]);
+  const code = await runLogout(["--registry", server.url]);
   const { log, error: errors } = finish();
 
   assert.equal(code, 0);
   assert.equal(errors.length, 0);
+  assert.ok(logoutRequest, "the server should have received a logout request");
+  assert.equal(logoutRequest.method, "POST");
+  assert.equal(logoutRequest.url, "/v2/auth/logout");
+  assert.equal(logoutRequest.headers.authorization, "Bearer token-a");
   assert.deepEqual(readCredentialsFile(), {
     "https://registry-b.example": "token-b",
   });
@@ -180,9 +371,29 @@ test("logout removes only the matching URL's entry", async (t) => {
     log.some((l) => l.includes("Removed credentials")),
     "expected a success message confirming removal",
   );
+});
+
+test("logout removes credentials even if server call fails", async (t) => {
+  prepareHome(t);
+
+  const server = await startServer(t, (req, _res) => {
+    req.socket.destroy();
+  });
+  writeCredentialsFile({ [server.url]: "some-token" });
+
+  const finish = withConsole();
+  t.after(finish);
+  const code = await runLogout(["--registry", server.url]);
+  const { log, error: errors } = finish();
+
+  assert.equal(code, 0);
+  assert.equal(errors.length, 0);
+  assert.deepEqual(readCredentialsFile(), {});
+  const warnLine = log.find((l) => l.startsWith("! "));
+  assert.ok(warnLine, "expected a warn-level message about server failure");
   assert.ok(
-    log.some((l) => l.includes("https://registry-a.example")),
-    "success should name the removed registry URL",
+    warnLine.includes("removing local credentials"),
+    "warn should mention that local credentials are still being removed",
   );
 });
 
@@ -206,4 +417,31 @@ test("logout for a URL with no stored entry warns and exits 0", async (t) => {
   const warnLine = log.find((l) => l.startsWith("! "));
   assert.ok(warnLine, "expected a warn-level message");
   assert.ok(warnLine.includes("https://registry-other.example"));
+});
+
+test("logout reports server error but still removes local credentials", async (t) => {
+  prepareHome(t);
+
+  const server = await startServer(t, (req, res) => {
+    jsonResponse(res, 500, { error: "internal server error" });
+  });
+
+  writeCredentialsFile({ [server.url]: "token-a" });
+
+  const finish = withConsole();
+  t.after(finish);
+  const code = await runLogout(["--registry", server.url]);
+  const { log, error: errors } = finish();
+
+  assert.equal(code, 0);
+  assert.equal(errors.length, 0);
+  assert.deepEqual(readCredentialsFile(), {});
+  assert.ok(
+    log.some((l) => l.includes("HTTP 500")),
+    "warn should mention the HTTP status code",
+  );
+  assert.ok(
+    log.some((l) => l.includes("removing local credentials")),
+    "warn should mention that local credentials are still being removed",
+  );
 });

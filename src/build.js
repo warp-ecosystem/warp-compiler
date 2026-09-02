@@ -31,7 +31,7 @@ export async function runBuild(product) {
 /**
  * Build the extension by bundling source files and assets.
  * @param {object} product - Product configuration object.
- * @returns {Promise<object|number>} { built, outputPath } on success, or 1 on failure.
+ * @returns {Promise<object|number>} { built, outputPath, manifest } on success, or 1 on failure.
  */
 export async function build(product) {
   const { bin, runtimeGlobal } = product;
@@ -130,7 +130,7 @@ export async function build(product) {
 
   runConsistencyChecks(manifest, ast);
 
-  return { built, outputPath };
+  return { built, outputPath, manifest };
 }
 
 /**

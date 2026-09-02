@@ -7,7 +7,7 @@ import pc from "picocolors";
 import { initProject } from "./init.js";
 import { runBuild } from "./build.js";
 import { runPublish } from "./publish.js";
-import { runLogin, runLogout } from "./auth.js";
+import { runLogin, runLogout, runSignup } from "./auth.js";
 import { error } from "./logger.js";
 
 /**
@@ -48,6 +48,10 @@ export async function runCli(product, argv) {
 
   if (command === "login") {
     return runLogin(argv.slice(1));
+  }
+
+  if (command === "signup") {
+    return runSignup(argv.slice(1));
   }
 
   if (command === "logout") {
@@ -91,6 +95,7 @@ function printHelp(product) {
     `  ${pc.bold("build")}  Compile the extension into a single file`,
     `  ${pc.bold("publish")}  Build and upload the extension to the Warp Registry`,
     `  ${pc.bold("login")}   Save credentials for the Warp Registry`,
+    `  ${pc.bold("signup")}  Create a Warp Registry account`,
     `  ${pc.bold("logout")}  Remove saved credentials for the Warp Registry`,
   ];
   console.log(lines.join("\n"));

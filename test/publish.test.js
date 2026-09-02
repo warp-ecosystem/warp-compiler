@@ -115,14 +115,23 @@ function jsonResponse(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-function createdResponse(status) {
+function createdResponse(approved) {
   return (req, res) =>
     jsonResponse(res, 201, {
-      owner: "testowner",
-      id: "helloworld",
-      version: "0.1.0",
-      status,
-      url: "https://example.invalid/extensions/helloworld/0.1.0",
+      extension: {
+        owner: "testowner",
+        id: "helloworld",
+        meta: {
+          id: "helloworld",
+          version: "0.1.0",
+          name: "Hello World",
+          license: "MIT",
+          description: "A test extension",
+        },
+        versions: approved ? ["0.1.0"] : [],
+        approved,
+      },
+      publishedUrl: "/v2/@testowner/helloworld",
     });
 }
 
@@ -134,7 +143,7 @@ test("missing credentials fail before any build or network activity", async (t) 
   prepareProject(t);
   const finish = withConsole();
 
-  const server = await startServer(t, createdResponse("published"));
+  const server = await startServer(t, createdResponse(true));
   const restoreEnv = setEnv({
     WARP_REGISTRY_URL: server.url,
     WARP_TOKEN: undefined,
@@ -171,7 +180,7 @@ test("201 with status published exits 0 and reports the publish", async (t) => {
   prepareProject(t);
   const finish = withConsole();
 
-  const server = await startServer(t, createdResponse("published"));
+  const server = await startServer(t, createdResponse(true));
   const restoreEnv = setEnv({
     WARP_TOKEN: "tok",
     WARP_REGISTRY_URL: server.url,
@@ -195,11 +204,11 @@ test("201 with status published exits 0 and reports the publish", async (t) => {
   assert.equal(successLine.includes("pending review"), false);
 });
 
-test("201 with status pending exits 0 with a distinct message", async (t) => {
+test("201 with approved false exits 0 with a distinct message", async (t) => {
   prepareProject(t);
   const finish = withConsole();
 
-  const server = await startServer(t, createdResponse("pending"));
+  const server = await startServer(t, createdResponse(false));
   const restoreEnv = setEnv({
     WARP_TOKEN: "tok",
     WARP_REGISTRY_URL: server.url,
@@ -229,6 +238,7 @@ test("201 with status pending exits 0 with a distinct message", async (t) => {
 for (const [status, message] of [
   [400, "manifest version is not a valid semver string"],
   [401, "invalid bearer token"],
+  [403, "a prior publish is still awaiting review"],
   [409, "version 0.1.0 already exists"],
 ]) {
   test(`HTTP ${status} exits 1 and prints the server error`, async (t) => {
@@ -263,9 +273,8 @@ test("the published body bytes match what build() produced", async (t) => {
 
   const direct = await build(PRODUCT);
   assert.notEqual(direct, 1);
-  const expectedBytes = fs.readFileSync(direct.outputPath);
 
-  const server = await startServer(t, createdResponse("published"));
+  const server = await startServer(t, createdResponse(true));
   const restoreEnv = setEnv({
     WARP_TOKEN: "tok",
     WARP_REGISTRY_URL: server.url,
@@ -283,16 +292,17 @@ test("the published body bytes match what build() produced", async (t) => {
   assert.equal(server.requests.length, 1);
   const [request] = server.requests;
   assert.equal(request.method, "POST");
-  assert.equal(request.url, "/v1/publish");
+  assert.equal(request.url, "/v2/publish");
   assert.equal(request.headers.authorization, "Bearer tok");
-  assert.equal(request.headers["content-type"], "application/javascript");
-  assert.ok(
-    request.body.equals(expectedBytes),
-    "published body must exactly equal the build output bytes",
-  );
-  assert.ok(
-    request.body.equals(Buffer.from(direct.built, "utf8")),
-    "published body must equal the directly returned build bytes",
+  assert.equal(request.headers["content-type"], "application/json");
+  const body = JSON.parse(request.body.toString("utf8"));
+  assert.equal(body.id, "helloworld");
+  assert.ok(body.meta && typeof body.meta === "object", "body.meta must be an object");
+  assert.equal(body.meta.id, "helloworld");
+  assert.equal(
+    body.extensionBlob,
+    direct.built,
+    "extensionBlob must equal the build output",
   );
 });
 
@@ -323,7 +333,7 @@ test("WARP_REGISTRY_URL overrides the compiled-in default", async (t) => {
   prepareProject(t);
   const finish = withConsole();
 
-  const server = await startServer(t, createdResponse("published"));
+  const server = await startServer(t, createdResponse(true));
   const restoreEnv = setEnv({
     WARP_TOKEN: "tok",
     WARP_REGISTRY_URL: server.url,
@@ -339,14 +349,14 @@ test("WARP_REGISTRY_URL overrides the compiled-in default", async (t) => {
 
   assert.equal(code, 0, "the env-configured registry should be reached");
   assert.equal(server.requests.length, 1);
-  assert.equal(server.requests[0].url, "/v1/publish");
+  assert.equal(server.requests[0].url, "/v2/publish");
 });
 
 test("--registry overrides WARP_REGISTRY_URL", async (t) => {
   prepareProject(t);
   const finish = withConsole();
 
-  const flagServer = await startServer(t, createdResponse("published"));
+  const flagServer = await startServer(t, createdResponse(true));
   const envServer = await startServer(t, () => {
     throw new Error("WARP_REGISTRY_URL must be overridden by --registry");
   });
@@ -494,7 +504,7 @@ test("publish rejects an empty query delimiter without reaching the registry", a
   prepareProject(t);
   const finish = withConsole();
 
-  const server = await startServer(t, createdResponse("published"));
+  const server = await startServer(t, createdResponse(true));
   const restoreEnv = setEnv({ WARP_TOKEN: "tok" });
 
   let code;
@@ -543,7 +553,7 @@ test("publish uses the stored credential when WARP_TOKEN is unset", async (t) =>
   prepareProject(t);
   const finish = withConsole();
 
-  const server = await startServer(t, createdResponse("published"));
+  const server = await startServer(t, createdResponse(true));
   writeCredentialsFile({ [server.url]: "stored-token" });
   const restoreEnv = setEnv({
     WARP_REGISTRY_URL: server.url,
@@ -567,7 +577,7 @@ test("WARP_TOKEN takes precedence over the stored credential", async (t) => {
   prepareProject(t);
   const finish = withConsole();
 
-  const server = await startServer(t, createdResponse("published"));
+  const server = await startServer(t, createdResponse(true));
   writeCredentialsFile({ [server.url]: "stored-token" });
   const restoreEnv = setEnv({
     WARP_TOKEN: "env-token",
@@ -587,16 +597,12 @@ test("WARP_TOKEN takes precedence over the stored credential", async (t) => {
   assert.equal(server.requests[0].headers.authorization, "Bearer env-token");
 });
 
-test("a 201 response missing status exits 1 with an unexpected shape error", async (t) => {
+test("a 201 response missing both extension and flat owner fields exits 1", async (t) => {
   prepareProject(t);
   const finish = withConsole();
 
   const server = await startServer(t, (req, res) =>
-    jsonResponse(res, 201, {
-      owner: "testowner",
-      id: "helloworld",
-      version: "0.1.0",
-    }),
+    jsonResponse(res, 201, { foo: "bar" }),
   );
   const restoreEnv = setEnv({
     WARP_TOKEN: "tok",
@@ -620,6 +626,79 @@ test("a 201 response missing status exits 1 with an unexpected shape error", asy
     log.some((l) => l.includes("Published @")),
     false,
     "a broken 201 must not be reported as successful",
+  );
+});
+
+test("a v1-format 201 with status published is accepted", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, (req, res) =>
+    jsonResponse(res, 201, {
+      owner: "testowner",
+      id: "helloworld",
+      version: "0.1.0",
+      status: "published",
+    }),
+  );
+  const restoreEnv = setEnv({
+    WARP_TOKEN: "tok",
+    WARP_REGISTRY_URL: server.url,
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  const { log } = finish();
+
+  assert.equal(code, 0);
+  const successLine = log.find((l) => l.startsWith("✓ "));
+  assert.ok(successLine, "expected a success message");
+  assert.ok(
+    successLine.includes("Published @testowner/helloworld@0.1.0"),
+    "expected the published artifact in the success message",
+  );
+  assert.equal(successLine.includes("pending review"), false);
+});
+
+test("a v1-format 201 with status pending is accepted with a distinct message", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, (req, res) =>
+    jsonResponse(res, 201, {
+      owner: "testowner",
+      id: "helloworld",
+      version: "0.1.0",
+      status: "pending",
+    }),
+  );
+  const restoreEnv = setEnv({
+    WARP_TOKEN: "tok",
+    WARP_REGISTRY_URL: server.url,
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  const { log } = finish();
+
+  assert.equal(code, 0);
+  const successLine = log.find((l) => l.startsWith("✓ "));
+  assert.ok(successLine, "expected a success message");
+  assert.ok(
+    successLine.includes("Published @testowner/helloworld@0.1.0"),
+    "expected the published artifact in the success message",
+  );
+  assert.ok(
+    successLine.includes("pending review"),
+    "expected a message distinguishing the pending publish",
   );
 });
 
