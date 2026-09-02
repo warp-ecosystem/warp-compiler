@@ -552,6 +552,35 @@ test("a stalled registry request is aborted and reported as a timeout", async (t
   );
 });
 
+test("a stalled non-201 error body is reported as a timeout, not a raw abort", async (t) => {
+  prepareProject(t);
+  const finish = withConsole();
+
+  const server = await startServer(t, (_req, res) => {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.flushHeaders();
+  });
+  const restoreEnv = setEnv({
+    WARP_TOKEN: "tok",
+    WARP_REGISTRY_URL: server.url,
+    WARP_PUBLISH_TIMEOUT_MS: "100",
+  });
+
+  let code;
+  try {
+    code = await runPublish(PRODUCT, []);
+  } finally {
+    restoreEnv();
+  }
+  const { error: errors } = finish();
+
+  assert.equal(code, 1);
+  assert.ok(
+    errors.some((l) => l.includes("timed out")),
+    "expected the stalled error body to be reported as a timeout",
+  );
+});
+
 test("publish uses the stored credential when WARP_TOKEN is unset", async (t) => {
   prepareProject(t);
   const finish = withConsole();

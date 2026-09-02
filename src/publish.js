@@ -67,9 +67,15 @@ export async function runPublish(product, args) {
       return await handleCreated(response, controller);
     }
 
-    const serverMessage = await readErrorMessage(response, {
-      signal: controller.signal,
-    });
+    let serverMessage;
+    try {
+      serverMessage = await readErrorMessage(response, {
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (controller.signal.aborted) throw new RegistryTimeoutError();
+      throw err;
+    }
 
     if (response.status === 400) {
       error(
